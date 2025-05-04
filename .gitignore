@@ -1,0 +1,8 @@
+__pycache__
+.vs*
+Notas.txt
+problemas.txt
+server.py 
+cliente.py 
+descompresor.sh
+dockerfile
