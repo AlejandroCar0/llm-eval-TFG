@@ -4,7 +4,7 @@ class OllamaHandler():
     def __init__(self, host_ip: str, host_port: str = "11434"):
         self.url = f"http://{host_ip}:{host_port}"
     
-    def multiple_prompts(self, model: str, prompts: list):
+    def chat_prompt(self, model: str, prompts: list) -> requests.Response:
         response = requests.post(
             f"{self.url}/api/chat",
             json = {

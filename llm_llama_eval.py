@@ -24,7 +24,36 @@ def pull_models(models: list, handler: OllamaHandler) -> None:
         log.info(f"[i green bold]Pulling model: {model}",extra = {"markup" : True})
         handler.pull_model(model)
         log.info(f"[i green bold]Model\[{model}] downloaded",extra = {"markup" : True})
-    
+
+def read_models() -> list:
+    with open(f"{EXECUTION_PATH}/modelList.txt","r") as modelList:
+        models = [line.rstrip("\n") for line in modelList]
+
+    return models
+
+def read_prompts() -> list:
+    prompts = []
+    with open(f"{EXECUTION_PATH}/prompts.txt","r") as promptsList:
+        for line in promptsList:
+            line = line.rsplit("\;")
+            prompts.append(line)
+
+    return prompts
+
+def process_prompt(prompts: list, model: str, handler: OllamaHandler) -> None:
+    if len(prompts) == 1:
+        response =  handler.single_prompt(model, prompts[0])
+    else:
+        messages = []
+        for prompt in prompts:
+            prompt = {"role" : "user", "content" : f"{prompt}"}
+            messages.append(prompt)
+            response = handler.chat_prompt(model,messages)
+            data = response.json()
+            messages.append(data.get("message"))
+            #Subdividir todo esto en funciones para dejarlo clean
+        print(messages)
+
 def process_models(ip_address: str):
     handler = OllamaHandler(ip_address)
     models = read_models()
@@ -33,17 +62,11 @@ def process_models(ip_address: str):
     pull_models(models, handler)
         
     #process prompts
-    response = handler.multiple_prompts("orca-mini", [{"role" : "user", "content" : "Hello"}, {"role" : "user", "content" : "Who are you?"}]) # ver como funciona bien esta vaina
-    response = handler.single_prompt("orca-mini","What number do you obtain from the sum off 2 and 3?")
-    data = response.json()
-    print(json.dumps(data, indent = 4))
-
-    response = handler.single_prompt("orca-mini","Tell me the last number you obtain from the previous question I made to you?")
-    data = response.json()
-    print(json.dumps(data, indent = 4))
+    prompts = read_prompts()
+    for prompt in prompts:
+        process_prompt(prompt, "phi3", handler)
     handler.list_models()
     
-
 
 def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.ChannelFile, paramiko.ChannelFile, paramiko.ChannelFile]:
     #TODO
@@ -52,13 +75,8 @@ def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.Channel
     #wait for the end of the command on the remote machine
     stdout.channel.recv_exit_status()
     log.info(f"[i green bold] \[Command: {command}] Executed", extra = {"markup" : True})
+
     return (stdin,stdout,stderr)
-
-def read_models() -> list:
-    with open(f"{EXECUTION_PATH}/modelList.txt","r") as modelList:
-        models = [line.rstrip("\n") for line in modelList]
-
-    return models
 
 def connection_establishment(user: str, password: str, ip_address: str, private_key: str) -> paramiko.SSHClient:
     ssh = paramiko.SSHClient()
