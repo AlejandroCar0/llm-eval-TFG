@@ -2,13 +2,9 @@ import click
 import re
 import os
 import paramiko
-import traceback
-import json
 import logging
-import paramiko.ssh_exception
 from rich.logging import RichHandler
 from ollama_handler import OllamaHandler
-import requests
 WORKING_PATH = f"llm-eval"
 OLLAMA_PATH = f"{WORKING_PATH}/ollama"
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
