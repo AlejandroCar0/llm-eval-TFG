@@ -6,3 +6,4 @@ server.py
 cliente.py 
 descompresor.sh
 dockerfile
+.DS_Store
