@@ -1,0 +1,3 @@
+Mirar PrompQL "lenguaje de consultas para prometheus"
+probar conexion con el node_exporter de la maquina remota
+probar que el node_exporter corre de manera correcta en la maquina remota y que se crean adecuadamente las rutas
