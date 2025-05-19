@@ -74,17 +74,19 @@ def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.Channel
 
     return (stdin,stdout,stderr)
 
-def connection_establishment(user: str, password: str, ip_address: str, private_key: str) -> paramiko.SSHClient:
+def connection_establishment(user: str, password: str, ip_address: str, private_key_file: str) -> paramiko.SSHClient:
     ssh = paramiko.SSHClient()
     #If is the first time connecting to a new server, will automatically save the public key into the .ssh/known_hosts file
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
     try:
         log.info(f"[i blue] \[+] Connecting with the server... [/]", extra = {"markup" : True})
-        ssh.connect(ip_address, username = user, key_filename = private_key)
+
+        pkey = paramiko.RSAKey.from_private_key_file(private_key_file)
+        ssh.connect(ip_address, username = user, pkey = pkey)
         log.info(f"[i green u] \[+] connection established[/]", extra = {"markup" : True})
     except paramiko.AuthenticationException as e:
-        log.info(f"[i red u] \[!] connection failed with key located in {private_key}", extra = {"markup" : True})
+        log.info(f"[i red u] \[!] connection failed with key located in {private_key_file}", extra = {"markup" : True})
         log.info(f"[i blue] \[+] Retrying with the password provided", extra = {"markup" : True})
         ssh.connect(ip_address, username = user, password = password)
         log.info(f"[i green u] \[+] connection established[/]", extra = {"markup" : True})
