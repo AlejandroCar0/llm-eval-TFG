@@ -7,3 +7,6 @@ cliente.py
 descompresor.sh
 dockerfile
 .DS_Store
+prometheus-*
+prometheus.yml
+data/
