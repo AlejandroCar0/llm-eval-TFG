@@ -93,7 +93,7 @@ def connection_establishment(user: str, password: str, ip_address: str, private_
 
     return ssh
 
-def environment_configuration(ssh: paramiko.SSHClient, password: str) -> None:
+def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_version: str) -> None:
     log.info(f"[i blue] \[+] Setting the environment[/]", extra = {"markup" : True})
 
     #primero tenemos que definir la ruta donde vamos a trabajar en el server remoto en este caso va a ser ${HOME}/llm-eval/
@@ -105,7 +105,7 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str) -> None:
     
     #Ejecutamos el script configurations.sh en el servidor
     run_command(ssh, f"chmod 755 {WORKING_PATH}/configurations.sh")
-    run_command(ssh, f"{WORKING_PATH}/configurations.sh {password}")
+    run_command(ssh, f"{WORKING_PATH}/configurations.sh {password} {ollama_version}")
 
     log.info(f"[i green u]  \[+] Configured environment [/]", extra = {"markup" : True})
 
@@ -119,22 +119,34 @@ def validarIp(ctx,param,valor: str) -> str:
     
     return valor
 
+def validar_version_ollama(ctx,param,valor: str) -> str:
+    ollama_versions = ''
+    with open(f"{EXECUTION_PATH}/versions/ollama_versions.txt","r") as versions:
+        ollama_versions = [version.rstrip(f"\n") for version in versions]
+
+    if valor not in ollama_versions:
+        raise click.BadParameter(f"Error, version should be one of the followings: {ollama_versions}")
+    
+    return valor
+
 @click.command()
 @click.option("--user", "-u", help="Name of the user to connect in target destination",default = "root")
 @click.option("--password", "-p", help="Password of the user to connect in target destination", default = "")
 @click.option("--ip-address", "-i", required=True, callback=validarIp, help="Ip-Address of the host where the test it's going to be executed")
+@click.option("--ollama-version", "-ov", callback=validar_version_ollama, help="ollama version to install in the SUT you must put the \"vx.x.x\"", default = "v0.7.0")
 @click.option("--private-key", "-pk", help="Path to private key in .pem format for ssh authentication", default=f"{os.getenv('HOME')}/.ssh/id_rsa")
-def procesarLLM(ip_address: str, private_key: str, user: str, password: str):
+def procesarLLM(ip_address: str, private_key: str, user: str, password: str, ollama_version: str):
      #Creacion de un cliente ssh
     #Si no se especifica la siguiente linea no funciona nada
     #Cargar claves con ssh-keyscan
     try:
         ssh = connection_establishment(user, password, ip_address, private_key)
-        environment_configuration(ssh, password)
+        environment_configuration(ssh, password, ollama_version)
+        
         #-----Instalando LLMS-------
-        run_command(ssh, f"OLLAMA_HOST={ip_address} {OLLAMA_PATH}/bin/ollama serve >/dev/null 2>&1 &") # poner el OLLAMA_HOST
+        #run_command(ssh, f"OLLAMA_HOST={ip_address} {OLLAMA_PATH}/bin/ollama serve >/dev/null 2>&1 &") # poner el OLLAMA_HOST
         #Usar api de ollama para el texto
-        process_models(ip_address)
+        #process_models(ip_address)
 
     except (paramiko.AuthenticationException, paramiko.BadHostKeyException, paramiko.SSHException) as e:
         log.exception(f"[bold red] \[!] ERROR: {e}[/]", extra = {"markup" : True})
