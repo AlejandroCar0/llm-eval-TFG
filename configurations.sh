@@ -1,6 +1,15 @@
 #!/bin/bash
 WORK_DIR=$(realpath $(dirname $0))
 password=$1
+architecture=$(uname -m)
+extension=""
+
+if [ $architecture == "x86_64" ]
+then
+    extension='amd'
+else
+    extension='arm'
+fi
 
 echo $password | sudo -S apt update
 echo $password | sudo -S apt upgrade
@@ -16,11 +25,9 @@ echo $password | sudo -S apt clean && rm -rf /var/lib/apt/list/*
 #Download and configure ollama
 OLLAMA_PATH=$WORK_DIR/ollama
 mkdir -p $OLLAMA_PATH
-
-curl -L https://github.com/ollama/ollama/releases/download/v0.5.11/ollama-linux-amd64.tgz -o $OLLAMA_PATH/ollama.tgz
+curl -L https://github.com/ollama/ollama/releases/download/v0.5.11/ollama-linux-${extension}64.tgz -o $OLLAMA_PATH/ollama.tgz
 tar xzf $OLLAMA_PATH/ollama.tgz -C $OLLAMA_PATH
 ls $OLLAMA_PATH | grep -v -E "(^bin$|^lib$)" | xargs -I{} rm -rf $OLLAMA_PATH/{}
-#ls  $OLLAMA_PATH | grep -v -e "bin" -e "lib" | xargs rm -rf
 
 #Download and configure the nodeExporter for prometheus
 EXPORTER_PATH=$WORK_DIR/node_exporter
@@ -29,4 +36,3 @@ curl -o $EXPORTER_PATH/nodeExporter.tar.gz -L https://github.com/prometheus/node
 tar xf $EXPORTER_PATH/nodeExporter.tar.gz -C $EXPORTER_PATH
 mv $EXPORTER_PATH/node_exporter-*/* $EXPORTER_PATH
 ls $EXPORTER_PATH | grep -v -e "^node_exporter$" | xargs -I{} rm -rf $EXPORTER_PATH/{}
-#rm -rf $WORK_DIR/nodeExporter.tar.gz
