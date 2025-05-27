@@ -4,7 +4,7 @@ import os
 import paramiko
 import logging
 from rich.logging import RichHandler
-from ollama_handler import OllamaHandler
+from ollama_handler import Ollama
 WORKING_PATH = f"llm-eval"
 OLLAMA_PATH = f"{WORKING_PATH}/ollama"
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("rich")
 
-def pull_models(models: list, handler: OllamaHandler) -> None:
+def pull_models(models: list, handler: Ollama) -> None:
 
     for model in models:
         log.info(f"[i green bold]Pulling model: {model}",extra = {"markup" : True})
@@ -36,7 +36,7 @@ def read_prompts() -> list:
 
     return prompts
 
-def process_prompt(prompts: list, model: str, handler: OllamaHandler) -> None:
+def process_prompt(prompts: list, model: str, handler: Ollama) -> None:
     if len(prompts) == 1:
         response =  handler.single_prompt(model, prompts[0])
     else:
@@ -51,7 +51,7 @@ def process_prompt(prompts: list, model: str, handler: OllamaHandler) -> None:
         print(messages)
 
 def process_models(ip_address: str):
-    handler = OllamaHandler(ip_address)
+    handler = Ollama(ip_address)
     models = read_models()
 
     #pull models
