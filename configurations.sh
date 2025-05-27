@@ -2,6 +2,7 @@
 WORK_DIR=$(realpath $(dirname $0))
 password=$1
 ollama_version=$2
+prometheus_version=$3
 architecture=$(uname -m)
 extension=""
 
@@ -33,8 +34,7 @@ ls $OLLAMA_PATH | grep -v -E "(^bin$|^lib$)" | xargs -I{} rm -rf $OLLAMA_PATH/{}
 #Download and configure the nodeExporter for prometheus
 EXPORTER_PATH=$WORK_DIR/node_exporter
 mkdir -p $EXPORTER_PATH
-#Now a days there is no ARM version for linux node_exporter
-curl -o $EXPORTER_PATH/nodeExporter.tar.gz -L https://github.com/prometheus/node_exporter/releases/download/v1.9.1/node_exporter-1.9.1.linux-amd64.tar.gz
+curl -o $EXPORTER_PATH/nodeExporter.tar.gz -L https://github.com/prometheus/node_exporter/releases/download/${prometheus_version}/node_exporter-${prometheus_version#v}.linux-${extension}64.tar.gz
 tar xf $EXPORTER_PATH/nodeExporter.tar.gz -C $EXPORTER_PATH
 mv $EXPORTER_PATH/node_exporter-*/* $EXPORTER_PATH
 ls $EXPORTER_PATH | grep -v -e "^node_exporter$" | xargs -I{} rm -rf $EXPORTER_PATH/{}
