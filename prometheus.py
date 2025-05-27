@@ -45,4 +45,3 @@ def main():
     print(p.query("100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))"))
     print(p.query("100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)"))
     #print(json.dumps(p.counter("node_memory_MemAvailable_bytes /1024/1024/1024"),indent=4))
-main()

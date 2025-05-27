@@ -2,24 +2,24 @@ import click
 import re
 import os
 import paramiko
-import logging
-from rich.logging import RichHandler
-from ollama_handler import Ollama
+from log import Log
+from ollama import Ollama
+from prometheus import Prometheus
 WORKING_PATH = f"llm-eval"
 OLLAMA_PATH = f"{WORKING_PATH}/ollama"
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
-FORMAT = "%(message)s"
-logging.basicConfig(
-    level = "NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler(tracebacks_suppress=[paramiko])]
-)
-log = logging.getLogger("rich")
+log = Log()
+#FORMAT = "%(message)s"
+#logging.basicConfig(
+#    level = "NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler(tracebacks_suppress=[paramiko])]
+#)
 
 def pull_models(models: list, handler: Ollama) -> None:
 
     for model in models:
-        log.info(f"[i green bold]Pulling model: {model}",extra = {"markup" : True})
+        log.info(f"Pulling model: {model}")
         handler.pull_model(model)
-        log.info(f"[i green bold]Model\[{model}] downloaded",extra = {"markup" : True})
+        log.info(f"Model\[{model}] downloaded")
 
 def read_models() -> list:
     with open(f"{EXECUTION_PATH}/modelList.txt","r") as modelList:
@@ -66,11 +66,11 @@ def process_models(ip_address: str):
 
 def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.ChannelFile, paramiko.ChannelFile, paramiko.ChannelFile]:
     #TODO
-    log.info(f"[i green bold] Running command: {command}", extra = {"markup" : True})
+    log.info(f"Running command: {command}")
     stdin,stdout,stderr = ssh.exec_command(command)
     #wait for the end of the command on the remote machine
     stdout.channel.recv_exit_status()
-    log.info(f"[i green bold] \[Command: {command}] Executed", extra = {"markup" : True})
+    log.info(f"\[Command: {command}] Executed")
 
     return (stdin,stdout,stderr)
 
@@ -80,21 +80,21 @@ def connection_establishment(user: str, password: str, ip_address: str, private_
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
     try:
-        log.info(f"[i blue] \[+] Connecting with the server... [/]", extra = {"markup" : True})
+        log.info(f"\[+] Connecting with the server... [/]")
 
         pkey = paramiko.RSAKey.from_private_key_file(private_key_file)
         ssh.connect(ip_address, username = user, pkey = pkey)
-        log.info(f"[i green u] \[+] connection established[/]", extra = {"markup" : True})
+        log.info(f"\[+] connection established[/]")
     except paramiko.AuthenticationException as e:
-        log.info(f"[i red u] \[!] connection failed with key located in {private_key_file}", extra = {"markup" : True})
-        log.info(f"[i blue] \[+] Retrying with the password provided", extra = {"markup" : True})
+        log.warning(f"\[!] connection failed with key located in {private_key_file}")
+        log.warning(f"\[+] Retrying with the password provided")
         ssh.connect(ip_address, username = user, password = password)
-        log.info(f"[i green u] \[+] connection established[/]", extra = {"markup" : True})
+        log.info(f"\[+] connection established[/]")
 
     return ssh
 
 def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_version: str, node_version: str) -> None:
-    log.info(f"[i blue] \[+] Setting the environment[/]", extra = {"markup" : True})
+    log.info(f"\[+] Setting the environment[/]")
 
     #primero tenemos que definir la ruta donde vamos a trabajar en el server remoto en este caso va a ser ${HOME}/llm-eval/
     run_command(ssh, f"mkdir -p {WORKING_PATH}")
@@ -107,7 +107,7 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
     run_command(ssh, f"chmod 755 {WORKING_PATH}/configurations.sh")
     run_command(ssh, f"{WORKING_PATH}/configurations.sh {password} {ollama_version} {node_version}")
 
-    log.info(f"[i green u]  \[+] Configured environment [/]", extra = {"markup" : True})
+    log.info(f"\[+] Configured environment [/]")
 
 #Funcion llamada por el callback para validar/procesar la dir ip
 def validarIp(ctx,param,valor: str) -> str:
@@ -151,17 +151,21 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
     try:
         ssh = connection_establishment(user, password, ip_address, private_key)
         environment_configuration(ssh, password, ollama_version, node_version)
-        
+        #----Iniciando prometheus---
+        #crear mi objeto de prometheus
+        #prometheus = Prometheus(remote_ip_address = ip_address)
+        #iniciar prometheus en el SUT
+        #Iniciar prometheus en mi maquina local
         #-----Instalando LLMS-------
         #run_command(ssh, f"OLLAMA_HOST={ip_address} {OLLAMA_PATH}/bin/ollama serve >/dev/null 2>&1 &") # poner el OLLAMA_HOST
         #Usar api de ollama para el texto
         #process_models(ip_address)
 
     except (paramiko.AuthenticationException, paramiko.BadHostKeyException, paramiko.SSHException) as e:
-        log.exception(f"[bold red] \[!] ERROR: {e}[/]", extra = {"markup" : True})
+        log.exception(f"ERROR: {e}[/]")
 
     except Exception as e:
-        log.exception(f"[bold red] \[!] ERROR: {e}[/]", extra = {"markup" : True})
+        log.exception(f"ERROR: {e}[/]")
     
     finally:
         ssh.close()
