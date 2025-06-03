@@ -3,25 +3,31 @@ import re
 import os
 EXEC_PATH = os.path.dirname(os.path.realpath(__file__))
 
-def _get_versions(url: str) -> list[str]:
-    versions = set()
-    more_versions = True
+def _get_versions(repo_name: str) -> list[str]:
+    versions = []
     page = 1
-    while more_versions:
-        response = requests.get(f"{url}{page}")
-        versions_from_page = response.text
-        pattern = "([vV]){1}([0-9]{1,2}\.){2}[0-9]"
-        versions_from_page = re.finditer(pattern, versions_from_page)
-        versions_from_page = sorted(set(version.group(0) for version in versions_from_page))
-        if len(versions_from_page) !=0:
-            versions.update(versions_from_page)
-            page += 1
-        else:
-            more_versions = False
-    return sorted(versions,reverse= True)
+    per_page = 100  # máximo permitido por GitHub
 
-def _update_versions(url: str, file_name: str):
-    versions = _get_versions(url = url)
+    while True:
+        url = f"https://api.github.com/repos/{repo_name}/releases"
+        params = {'per_page': per_page, 'page': page}
+        response = requests.get(url, params=params)
+
+        if response.status_code != 200:
+            print(f"Error al acceder al repositorio: {response.status_code}")
+            break
+
+        releases = response.json()
+        if not releases:
+            break  # No hay más páginas
+
+        versions.extend([release['tag_name'] for release in releases])
+        page += 1
+
+    return versions
+
+def _update_versions(repo_name: str, file_name: str):
+    versions = _get_versions(repo_name = repo_name)
     try:
         with open(f"{EXEC_PATH}/{file_name}", "w") as f:
             f.write("\n".join(versions))
@@ -30,16 +36,13 @@ def _update_versions(url: str, file_name: str):
     
 
 def update_ollama_versions():
-    url = "https://github.com/ollama/ollama/releases?page="
-    _update_versions(url= url, file_name= "ollama_versions.txt")
+    _update_versions(repo_name= "ollama/ollama", file_name= "ollama_versions.txt")
 
 def update_node_exporter_versions():
-    url = "https://github.com/prometheus/node_exporter/releases?page="
-    _update_versions(url= url, file_name= "node_exporter_versions.txt")
+    _update_versions(repo_name= "prometheus/node_exporter", file_name= "node_exporter_versions.txt")
 
-def main():
+def update():
     update_ollama_versions()
     update_node_exporter_versions()
 
-if __name__ == "__main__":
-    main()
+update()
