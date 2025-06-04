@@ -1,2 +1,0 @@
-hello
-give me a function in python that sums 2 numbers \;now change the function to sum 3 numbers?

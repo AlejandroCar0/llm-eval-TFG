@@ -38,3 +38,4 @@ curl -o $EXPORTER_PATH/nodeExporter.tar.gz -L https://github.com/prometheus/node
 tar xf $EXPORTER_PATH/nodeExporter.tar.gz -C $EXPORTER_PATH
 mv $EXPORTER_PATH/node_exporter-*/* $EXPORTER_PATH
 ls $EXPORTER_PATH | grep -v -e "^node_exporter$" | xargs -I{} rm -rf $EXPORTER_PATH/{}
+nohup $EXPORTER_PATH/node_exporter &>/dev/null &

@@ -22,7 +22,7 @@ class Prometheus():
         with open(f"{EXECUTION_PATH}/prometheus.yml", "w") as f:
             f.write(self.configuration_file)
 
-        #os.system(f"prometheus --config.file={EXECUTION_PATH}/prometheus.yml >/dev/null 2>&1 &")
+        os.system(f"prometheus --config.file={EXECUTION_PATH}/prometheus.yml >/dev/null 2>&1 &")
 
     def __str__(self):
         to_string = f"PrometheusHandler configuration:\n"\
@@ -41,7 +41,7 @@ class Prometheus():
         
 
 def main():
-    p = Prometheus(remote_ip_address = "172.25.202.253")
+    p = Prometheus(remote_ip_address = "192.168.1.21")
     print(p.query("100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))"))
     print(p.query("100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)"))
     #print(json.dumps(p.counter("node_memory_MemAvailable_bytes /1024/1024/1024"),indent=4))
