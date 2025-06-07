@@ -13,8 +13,8 @@ else
     extension='arm'
 fi
 
-echo $password | sudo -S apt update
-echo $password | sudo -S apt upgrade
+echo $password | sudo -S apt update -y
+#echo $password | sudo -S apt upgrade -y 
 echo $password | sudo -S apt install -y p7zip-full \
 git \
 netcat-traditional \
@@ -23,6 +23,11 @@ python3-venv \
 python3-pip \
 curl
 echo $password | sudo -S apt clean && rm -rf /var/lib/apt/list/*
+
+if [ extension == "arm" ]
+then
+    echo $password | sudo -S pip3 install jetson-stats
+fi
 
 #Download and configure ollama
 OLLAMA_PATH=$WORK_DIR/ollama

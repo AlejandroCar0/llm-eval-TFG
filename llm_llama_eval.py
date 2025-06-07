@@ -16,10 +16,10 @@ EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.ChannelFile, paramiko.ChannelFile, paramiko.ChannelFile]:
     #TODO
     logger.debug_color(f"Running command: {command}")
-    stdin,stdout,stderr = ssh.exec_command(command)
+    stdin,stdout,stderr = ssh.exec_command(command, timeout=180)
     #wait for the end of the command on the remote machine
-    stdout.channel.recv_exit_status()
-    logger.debug_color(f"\[Command: {command}] Executed")
+    status_code = stdout.channel.recv_exit_status()
+    logger.debug_color(f"\[Command: {command}] Executed with status code = {status_code}")
 
     return (stdin,stdout,stderr)
 
@@ -46,15 +46,22 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
     logger.debug_color(f"\[+] Setting the environment[/]")
 
     #primero tenemos que definir la ruta donde vamos a trabajar en el server remoto en este caso va a ser ${HOME}/llm-eval/
-    run_command(ssh, f"mkdir -p {WORKING_PATH}")
+    run_command(ssh, f"mkdir -p {WORKING_PATH}/gpu_exporter")
 
     #procedemos a copiar el archivo de configuracion para establecer las librerias y cosas necesarias en el servidor
     with ssh.open_sftp() as sftp:
         sftp.put(localpath=f"{EXECUTION_PATH}/configurations.sh", remotepath=f"{WORKING_PATH}/configurations.sh")
-    
+        sftp.put(localpath=f"{EXECUTION_PATH}/gpu_exporter/requirements.txt", remotepath=f"{WORKING_PATH}/gpu_exporter/requirements.txt")
+        sftp.put(localpath=f"{EXECUTION_PATH}/gpu_exporter/gpu_export_metrics.py", remotepath=f"{WORKING_PATH}/gpu_exporter/gpu_export_metrics.py")
     #Ejecutamos el script configurations.sh en el servidor
     run_command(ssh, f"chmod 755 {WORKING_PATH}/configurations.sh")
     run_command(ssh, f"{WORKING_PATH}/configurations.sh {password} {ollama_version} {node_version}")
+
+    #arrancamos el script de exportacion
+    run_command(ssh, f"chmod 777 {WORKING_PATH}/gpu_exporter/*")
+    run_command(ssh,f"python3 -m venv {WORKING_PATH}/venv")
+    run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install -r {WORKING_PATH}/gpu_exporter/requirements.txt")
+    run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
 
     logger.debug_color(f"\[+] Configured environment [/]")
 
@@ -89,11 +96,22 @@ stop = threading.Event()
 def collect_prometheus_metrics(prometheus):
     with open(f"{EXECUTION_PATH}/salida.txt","a") as f:
         while not stop.is_set():
-            memory = prometheus.query("100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))")
-            cpu = prometheus.query("100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)")
-            data = f"{memory};{cpu}\n"
-            f.write(data)   
-            os.system("sleep 2")
+            with open(f"{EXECUTION_PATH}/prometheus/querys.txt","r") as f2:
+                querys = [query.rstrip("\n") for query in f2]
+                results = []
+                data = ""
+                for query in querys:
+                    result = prometheus.query(query)
+                    results.append(result)
+                    data += f"{result};"
+                data +="\n"
+                f.write(data)
+                #memory = prometheus.query("100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))")
+                #cpu = prometheus.query("100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)")
+                #pepito = prometheus.query("gpu_power_usage_mw{job=\"gpu_exporter\"}")
+                #data = f"{memory};{cpu};{pepito}\n"
+                #f.write(data)   
+                os.system("sleep 2")
 
 
 @click.command()
@@ -110,6 +128,7 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
     try:
         ssh = connection_establishment(user, password, ip_address, private_key)
         environment_configuration(ssh, password, ollama_version, node_version)
+        
         prometheus = Prometheus(remote_ip_address=ip_address)
         logger.debug_color("Durmiendo")
         os.system("sleep 10")#no funcionaba porque no le daba tiempo a iniciar
@@ -119,10 +138,12 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
         os.system("sleep 10")
         stop.set()
         collector_thread.join()
+        """"
         #-----Instalando LLMS-------
        # run_command(ssh, f"OLLAMA_HOST={ip_address} {OLLAMA_PATH}/bin/ollama serve >/dev/null 2>&1 &") # poner el OLLAMA_HOST
         #Usar api de ollama para el texto
         #process_models(ip_address)
+        """
        
     except (paramiko.AuthenticationException, paramiko.BadHostKeyException, paramiko.SSHException) as e:
         logger.exception_color(e)
