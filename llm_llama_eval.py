@@ -5,6 +5,7 @@ import paramiko
 from logger.log import logger
 from ollama.ollama import Ollama
 from prometheus.prometheus import Prometheus
+from prometheus.prometheus_handler import PrometheusHandler
 import threading
 WORKING_PATH = f"llm-eval"
 OLLAMA_PATH = f"{WORKING_PATH}/ollama"
@@ -94,7 +95,7 @@ def validate_node_exporter_version(ctx,param,valor: str) -> str:
     return valor
 stop = threading.Event()
 def collect_prometheus_metrics(prometheus):
-    with open(f"{EXECUTION_PATH}/salida.txt","a") as f:
+    with open(f"{EXECUTION_PATH}/metrics/prometheus_metrics.txt","a") as f:
         while not stop.is_set():
             with open(f"{EXECUTION_PATH}/prometheus/querys.txt","r") as f2:
                 querys = [query.rstrip("\n") for query in f2]
@@ -128,7 +129,11 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
     try:
         ssh = connection_establishment(user, password, ip_address, private_key)
         environment_configuration(ssh, password, ollama_version, node_version)
-        
+        prometheus = PrometheusHandler(ip_address)
+        prometheus.start_collection()
+        os.system("sleep 10")
+        prometheus.stop_collection()
+        """"
         prometheus = Prometheus(remote_ip_address=ip_address)
         logger.debug_color("Durmiendo")
         os.system("sleep 10")#no funcionaba porque no le daba tiempo a iniciar
@@ -138,7 +143,7 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
         os.system("sleep 10")
         stop.set()
         collector_thread.join()
-        """"
+        #para arriba funciona
         #-----Instalando LLMS-------
        # run_command(ssh, f"OLLAMA_HOST={ip_address} {OLLAMA_PATH}/bin/ollama serve >/dev/null 2>&1 &") # poner el OLLAMA_HOST
         #Usar api de ollama para el texto
