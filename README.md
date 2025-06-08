@@ -14,10 +14,15 @@ curl -LO https://github.com/prometheus/prometheus/releases/download/v3.3.1/prome
 
 tar -xvf prometheus-*.tar.gz 
 
-## Move the binaries "prometheus" and "promtool" to the /usr/local/bin 
+## Move the binaries "prometheus" and "promtool" to the /usr/local/bin or any place in the path
 
 sudo mv ./prometheus-3.3.1.darwin-arm64/prometheus /usr/local/bin/
 sudo mv ./prometheus-3.3.1.darwin-arm64/promtool /usr/local/bin/
 
 if prometheus is now on your /usr/local/bin you can do any comand, for example:
 prometheus --version will work
+
+##### Alternative moving prometheus to the path
+Take the path where prometheus has been installed, example : /home/pepe/prometheus/
+
+export PATH=$HOME/prometheus/:$PATH

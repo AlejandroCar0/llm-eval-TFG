@@ -7,7 +7,7 @@ from logger.log import logger
 
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 METRICS_PATH = f"{EXECUTION_PATH}/../metrics"
-EXPORT_METRICS = "cpu;memory;gpu_utilization;gpu_memory_used;gpu_memory_total;gpu_power_usage;gpu_temperature;gpu_encoder_util;gpu_decoder_util\n"
+EXPORT_METRICS = "timestamp;cpu;memory;gpu_utilization;gpu_memory_used;gpu_memory_total;gpu_power_usage;gpu_temperature;gpu_encoder_util;gpu_decoder_util\n"
 class PrometheusHandler():
 
     def __init__(self, remote_ip_address: str):
@@ -22,7 +22,7 @@ class PrometheusHandler():
         self.stop_signal = threading.Event()
         self.collector = threading.Thread(target = self._process_metrics)
         os.system(f"mkdir -p {METRICS_PATH}")
-        with open(f"{METRICS_PATH}/prometheus_metrics.txt", "w") as f:
+        with open(f"{METRICS_PATH}/prometheus_metrics.csv", "w") as f:
             f.write(f"{EXPORT_METRICS}")
 
     def _read_querys(self):
@@ -38,21 +38,21 @@ class PrometheusHandler():
         return querys
 
     def _collect_metrics(self, querys : list[str]):
-        with open(f"{METRICS_PATH}/prometheus_metrics.txt", "a") as f:
-
+        with open(f"{METRICS_PATH}/prometheus_metrics.csv", "a") as f:
+            values = []
+            values.append(str(time.time()))
             for query in querys:
                 self.log.debug_color(f"Doing query: \[{query}]")
-                data = self.prometheus.query(query)
-                f.write(f"{data};")
+                data = str(self.prometheus.query(query))
+                values.append(f"{data}")
                 self.log.debug_color(f"Query done!")
-
-            f.write("\n")
+            f.write(";".join(values) + "\n")
     
     def _process_metrics(self):
-        querys = self.read_querys()
+        querys = self._read_querys()
 
         while not self.stop_signal.is_set():
-            self.collect_metrics(querys)
+            self._collect_metrics(querys)
             time.sleep(2)
     
     def start_collection(self):

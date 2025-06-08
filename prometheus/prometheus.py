@@ -41,7 +41,7 @@ class Prometheus():
         data = response.json()
         data = data.get("data",{}).get("result",[])[0].get("value",[])
         #manejar errores en la obtencion del dato
-        return data
+        return data[1]
         
 
 def main():
