@@ -1,5 +1,11 @@
 100 * (1 - (node_memory_MemAvailable_bytes{job="node_exporter"} / node_memory_MemTotal_bytes{job="node_exporter"}))
 100 - (avg(rate(node_cpu_seconds_total{job="node_exporter", mode="idle"}[1m])) * 100)
+rate(node_disk_read_bytes_total{job="node_exporter"}[1m])
+rate(node_disk_written_bytes_total{job="node_exporter"}[1m])
+rate(node_disk_reads_completed_total{job="node_exporter"}[1m])
+rate(node_disk_writes_completed_total{job="node_exporter"}[1m])
+rate(node_disk_io_time_seconds_total{job="node_exporter"}[1m])
+node_filesystem_size_bytes{job="node_exporter"} - node_filesystem_free_bytes{job="node_exporter"}
 gpu_utilization{job="gpu_exporter"}
 gpu_memory_used_bytes{job="gpu_exporter"}
 gpu_memory_total_bytes{job="gpu_exporter"}

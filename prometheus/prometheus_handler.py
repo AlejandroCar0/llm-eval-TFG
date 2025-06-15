@@ -7,7 +7,7 @@ from logger.log import logger
 
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 METRICS_PATH = f"{EXECUTION_PATH}/../metrics"
-EXPORT_METRICS = "timestamp;cpu;memory;gpu_utilization;gpu_memory_used;gpu_memory_total;gpu_power_usage;gpu_temperature;gpu_encoder_util;gpu_decoder_util\n"
+EXPORT_METRICS = "timestamp;cpu;memory;disk_read_bytes;disk_written_bytes;disk_reads_completed;disk_writes_completed;disk_busy_time;disk_used_bytes;gpu_utilization;gpu_memory_used;gpu_memory_total;gpu_power_usage;gpu_temperature;gpu_encoder_util;gpu_decoder_util\n"
 class PrometheusHandler():
 
     def __init__(self, remote_ip_address: str):
@@ -21,7 +21,7 @@ class PrometheusHandler():
 
         self.stop_signal = threading.Event()
         self.collector = threading.Thread(target = self._process_metrics)
-        os.system(f"mkdir -p {METRICS_PATH}")
+        os.system(f"mkdir -p {METRICS_PATH}") #deberia hacerse al princpio de llm-eval que prepare todas las rutas
         with open(f"{METRICS_PATH}/prometheus_metrics.csv", "w") as f:
             f.write(f"{EXPORT_METRICS}")
 
