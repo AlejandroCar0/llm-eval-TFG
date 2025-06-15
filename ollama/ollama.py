@@ -15,6 +15,9 @@ class Ollama():
         )
 
         return response
+
+    def load_model(self, model: str):
+        return requests.post(f"{self.url}/api/generate")
     
     def single_prompt(self, model: str, prompt: str) -> requests.Response:
         response = requests.post(
