@@ -3,7 +3,7 @@ import re
 import os
 import paramiko
 from logger.log import logger
-from ollama.ollama import Ollama
+from ollama.ollama_handler import OllamaHandler
 from prometheus.prometheus import Prometheus
 from prometheus.prometheus_handler import PrometheusHandler
 import threading
@@ -61,7 +61,7 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
     #arrancamos el script de exportacion
     run_command(ssh, f"chmod 777 {WORKING_PATH}/gpu_exporter/*")
     run_command(ssh,f"python3 -m venv {WORKING_PATH}/venv")
-    run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install -r {WORKING_PATH}/gpu_exporter/requirements.txt")
+    run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install --user -r {WORKING_PATH}/gpu_exporter/requirements.txt")
     run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
 
     logger.debug_color(f"\[+] Configured environment [/]")
@@ -131,24 +131,14 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
         environment_configuration(ssh, password, ollama_version, node_version)
         prometheus = PrometheusHandler(ip_address)
         prometheus.start_collection()
-        os.system("sleep 10")
-        prometheus.stop_collection()
-        """"
-        prometheus = Prometheus(remote_ip_address=ip_address)
-        logger.debug_color("Durmiendo")
-        os.system("sleep 10")#no funcionaba porque no le daba tiempo a iniciar
-        logger.debug_color("despertando")
-        collector_thread = threading.Thread(target = collect_prometheus_metrics, args=(prometheus,))
-        collector_thread.start()
-        os.system("sleep 10")
-        stop.set()
-        collector_thread.join()
-        #para arriba funciona
+        
         #-----Instalando LLMS-------
-       # run_command(ssh, f"OLLAMA_HOST={ip_address} {OLLAMA_PATH}/bin/ollama serve >/dev/null 2>&1 &") # poner el OLLAMA_HOST
+        run_command(ssh, f"OLLAMA_HOST={ip_address} {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &") # poner el OLLAMA_HOST
+        ollama = OllamaHandler(ip_address)
+
         #Usar api de ollama para el texto
-        #process_models(ip_address)
-        """
+        ollama.process_models()
+        prometheus.stop_collection()
        
     except (paramiko.AuthenticationException, paramiko.BadHostKeyException, paramiko.SSHException) as e:
         logger.exception_color(e)
