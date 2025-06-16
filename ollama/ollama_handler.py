@@ -15,7 +15,9 @@ class OllamaHandler():
             f.write(f"{EXPORT_METRICS}\n")
         with open (f"{METRICS_PATH}/response.txt","w") as f:
             f.write(f"Model;Prompt;response\n")
-        self.pull_models(self.read_models())
+        
+        self.models = self.read_models()
+        self.pull_models(self.models)
         
 
     def pull_models(self, models: list) -> None:
@@ -110,7 +112,7 @@ class OllamaHandler():
     
 
     def process_models(self):
-        models = self.read_models()
+        models = self.models
         prompts = self.read_prompts()
         self.log.debug_color(f"Prompts: {prompts}")
         #pull models
