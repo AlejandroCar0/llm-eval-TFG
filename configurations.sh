@@ -26,7 +26,7 @@ echo $password | sudo -S apt clean && rm -rf /var/lib/apt/list/*
 
 if [ extension == "arm" ]
 then
-    echo $password | sudo -S pip3 install jetson-stats
+    echo $password | sudo -S pip3 install -U jetson-stats
 fi
 
 #Download and configure ollama

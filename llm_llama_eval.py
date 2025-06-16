@@ -61,7 +61,7 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
     #arrancamos el script de exportacion
     run_command(ssh, f"chmod 777 {WORKING_PATH}/gpu_exporter/*")
     run_command(ssh,f"python3 -m venv {WORKING_PATH}/venv")
-    run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install --user -r {WORKING_PATH}/gpu_exporter/requirements.txt")
+    run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install -r {WORKING_PATH}/gpu_exporter/requirements.txt")
     run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
 
     logger.debug_color(f"\[+] Configured environment [/]")
@@ -129,13 +129,12 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
     try:
         ssh = connection_establishment(user, password, ip_address, private_key)
         environment_configuration(ssh, password, ollama_version, node_version)
-        prometheus = PrometheusHandler(ip_address)
-        prometheus.start_collection()
-        
-        #-----Instalando LLMS-------
         run_command(ssh, f"OLLAMA_HOST={ip_address} {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &") # poner el OLLAMA_HOST
+        prometheus = PrometheusHandler(ip_address)
+        os.system("sleep 20")
+        #-----Instalando LLMS-------
         ollama = OllamaHandler(ip_address)
-
+        prometheus.start_collection()
         #Usar api de ollama para el texto
         ollama.process_models()
         prometheus.stop_collection()
@@ -145,6 +144,7 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
 
     except Exception as e:
         logger.exception_color(e)
+        prometheus.stop_collection()
     
     finally:
         ssh.close()

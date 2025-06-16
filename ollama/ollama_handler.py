@@ -15,6 +15,7 @@ class OllamaHandler():
             f.write(f"{EXPORT_METRICS}\n")
         with open (f"{METRICS_PATH}/response.txt","w") as f:
             f.write(f"Model;Prompt;response\n")
+        self.pull_models(self.read_models())
         
 
     def pull_models(self, models: list) -> None:
@@ -95,14 +96,16 @@ class OllamaHandler():
             self.log.debug_color(f"processing prompt: {prompt}")
             response = self.ollama.single_prompt(model, prompt)
             self.log.debug_color(f"Prompt processed")
+            if response.status_code ==200:
+                data = response.json()
+                parsed_prompt += self.parse_assistant_prompt(data)
 
-            data = response.json()
-            parsed_prompt += self.parse_assistant_prompt(data)
-
-            self.write_metrics(self.extract_metrics(data))
-            self.save_response(prompt, data.get('response'), model)
-
-            print(json.dumps(response.json(), indent = 4)) #debugging purposes
+                self.write_metrics(self.extract_metrics(data))
+                self.save_response(prompt, data.get('response'), model)
+                print(json.dumps(response.json(), indent = 4)) #debugging purposes
+            else:
+                self.log.warning_color(f"!!ERROR, el modelo {model}, fallo procesando la prompt: {prompt}\nMotivo: {response.reason}\nCuerpo:{response.text}")
+            
         
     
 
@@ -111,7 +114,7 @@ class OllamaHandler():
         prompts = self.read_prompts()
         self.log.debug_color(f"Prompts: {prompts}")
         #pull models
-        self.pull_models(models)
+        
         
         for model in models:
             #empezamos cargando cada modelo

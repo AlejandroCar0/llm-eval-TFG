@@ -15,12 +15,13 @@ class PrometheusHandler():
         self.log.debug_color(f"Starting prometheus...")
 
         self.prometheus = Prometheus(remote_ip_address)
-        time.sleep(10)
+        time.sleep(20)
 
         self.log.debug_color(f"Prometheus started!")
 
         self.stop_signal = threading.Event()
         self.collector = threading.Thread(target = self._process_metrics)
+        self.collector.daemon = True
         os.system(f"mkdir -p {METRICS_PATH}") #deberia hacerse al princpio de llm-eval que prepare todas las rutas
         with open(f"{METRICS_PATH}/prometheus_metrics.csv", "w") as f:
             f.write(f"{EXPORT_METRICS}")
