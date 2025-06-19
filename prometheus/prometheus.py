@@ -1,9 +1,11 @@
 import os
 import requests
 import json
+from logger.log import logger
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 class Prometheus():
     def __init__(self, remote_ip_address: str, node_exporter_port: str = "9100",gpu_exporter_port: str = 9115, time_interval = "1"):
+        self.log = logger.getChild(__file__)
         self.remote_ip_address = remote_ip_address
         self.node_exporter_port = node_exporter_port
         self.gpu_exporter_port = gpu_exporter_port
@@ -37,16 +39,24 @@ class Prometheus():
     
     def query(self, query: str):
         payload = {"query" : query}
-        response = requests.get(self.url, params=payload)
-        data = response.json()
-        data = data.get("data",{}).get("result",[])[0].get("value",[])
-        #manejar errores en la obtencion del dato
-        return data[1]
-        
+        try:
+            response = requests.get(self.url, params=payload)
 
-def main():
-    p = Prometheus(remote_ip_address = "192.168.1.21")
-    print(p.query("100 * (1 - (node_memory_MemAvailable_bytes{job=\"node_exporter\"} / node_memory_MemTotal_bytes{job=\"node_exporter\"}))"))
-    print(p.query("100 - (avg(rate(node_cpu_seconds_total{job=\"node_exporter\", mode=\"idle\"}[1m])) * 100)"))
-    print(p.query(""))
-    #print(json.dumps(p.counter("node_memory_MemAvailable_bytes /1024/1024/1024"),indent=4))
+            if response.status_code  != 200:
+                return "Error"
+            
+            data = response.json()
+            data = data.get("data",{}).get("result",[])
+
+            if not data:
+                return "Error"
+            
+            data = data[0].get("value",[])
+
+            if data and len(data) > 1 and data[1]:
+                return data[1]
+
+            return "Error"
+        
+        except requests.exceptions.RequestException as e:
+            self.log.exception_color(f"{e}")
