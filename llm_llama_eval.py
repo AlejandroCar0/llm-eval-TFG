@@ -11,7 +11,6 @@ WORKING_PATH = f"llm-eval"
 OLLAMA_PATH = f"{WORKING_PATH}/ollama"
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 
-
     
 
 def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.ChannelFile, paramiko.ChannelFile, paramiko.ChannelFile]:
@@ -43,6 +42,20 @@ def connection_establishment(user: str, password: str, ip_address: str, private_
 
     return ssh
 
+def is_gpu_available(ssh):
+
+    logger.info_color(f"Checking if GPU is available")
+
+    _, stdout, _ = run_command(ssh, f"nvidia-smi")
+
+    if stdout.channel.recv_exit_status() == 0:
+        logger.info_color(f"GPU is available")
+        return True
+    
+    logger.warning_color("No GPU detected")
+    return False
+
+
 def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_version: str, node_version: str) -> None:
     logger.debug_color(f"\[+] Setting the environment[/]")
 
@@ -59,12 +72,21 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
     run_command(ssh, f"{WORKING_PATH}/configurations.sh {password} {ollama_version} {node_version}")
 
     #arrancamos el script de exportacion
+    """
     run_command(ssh, f"chmod 777 {WORKING_PATH}/gpu_exporter/*")
     run_command(ssh,f"python3 -m venv {WORKING_PATH}/venv")
     run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install -r {WORKING_PATH}/gpu_exporter/requirements.txt")
     run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
+     """
 
     logger.debug_color(f"\[+] Configured environment [/]")
+
+def gpu_exporter_configuration(ssh: paramiko.SSHClient):
+    #arrancamos el script de exportacion
+    run_command(ssh, f"chmod 777 {WORKING_PATH}/gpu_exporter/*")
+    run_command(ssh,f"python3 -m venv {WORKING_PATH}/venv")
+    run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install -r {WORKING_PATH}/gpu_exporter/requirements.txt")
+    run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
 
 #Funcion llamada por el callback para validar/procesar la dir ip
 def validarIp(ctx,param,valor: str) -> str:
@@ -93,27 +115,6 @@ def validate_node_exporter_version(ctx,param,valor: str) -> str:
     if valor not in node_exporter_versions:
         raise click.BadParameter(f"Error, version should be one of the followings: {node_exporter_versions}")
     return valor
-stop = threading.Event()
-def collect_prometheus_metrics(prometheus):
-    with open(f"{EXECUTION_PATH}/metrics/prometheus_metrics.txt","a") as f:
-        while not stop.is_set():
-            with open(f"{EXECUTION_PATH}/prometheus/querys.txt","r") as f2:
-                querys = [query.rstrip("\n") for query in f2]
-                results = []
-                data = ""
-                for query in querys:
-                    result = prometheus.query(query)
-                    results.append(result)
-                    data += f"{result};"
-                data +="\n"
-                f.write(data)
-                #memory = prometheus.query("100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))")
-                #cpu = prometheus.query("100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)")
-                #pepito = prometheus.query("gpu_power_usage_mw{job=\"gpu_exporter\"}")
-                #data = f"{memory};{cpu};{pepito}\n"
-                #f.write(data)   
-                os.system("sleep 2")
-
 
 @click.command()
 @click.option("--user", "-u", help="Name of the user to connect in target destination",default = "root")
@@ -129,8 +130,12 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
     try:
         ssh = connection_establishment(user, password, ip_address, private_key)
         environment_configuration(ssh, password, ollama_version, node_version)
-        run_command(ssh, f"OLLAMA_HOST={ip_address} {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &") # poner el OLLAMA_HOST
-        prometheus = PrometheusHandler(ip_address)
+        gpu_available = is_gpu_available(ssh)
+
+        if gpu_available:
+            gpu_exporter_configuration(ssh)
+        run_command(ssh, f"OLLAMA_HOST=0.0.0.0 {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &") # poner el OLLAMA_HOST
+        prometheus = PrometheusHandler(ip_address, gpu_available)
         os.system("sleep 20")
         #-----Instalando LLMS-------
         ollama = OllamaHandler(ip_address)

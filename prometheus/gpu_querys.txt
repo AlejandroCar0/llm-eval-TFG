@@ -1,0 +1,7 @@
+gpu_utilization{job="gpu_exporter"}
+gpu_memory_used_bytes{job="gpu_exporter"}
+gpu_memory_total_bytes{job="gpu_exporter"}
+gpu_power_usage_mw{job="gpu_exporter"}
+gpu_temperature_celsius{job="gpu_exporter"}
+gpu_encoder_utilization{job="gpu_exporter"}
+gpu_decoder_utilization{job="gpu_exporter"}
