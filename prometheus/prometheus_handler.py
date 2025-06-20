@@ -3,7 +3,6 @@ from prometheus.prometheus import Prometheus
 import threading
 import os
 import time
-import torch
 from logger.log import logger
 
 
