@@ -1,15 +1,5 @@
 import sys
 import pynvml
-<<<<<<< HEAD
-
-try:
-    pynvml.nvmlInit()
-    pynvml.nvmlDeviceGetCount()  # Lanza excepción si no hay GPU
-    pynvml.nvmlShutdown()
-    sys.exit(0)  # OK
-except pynvml.NVMLError:
-    sys.exit(1)  # No hay GPU o no están los drivers
-=======
 import os
 import subprocess
 
@@ -70,5 +60,3 @@ def checker():
     sys.exit(1)
 
 checker()
-    
->>>>>>> deecaf1 (Fix for gpu_detection)
