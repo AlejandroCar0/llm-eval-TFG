@@ -34,10 +34,10 @@ fi
 OLLAMA_PATH=$WORK_DIR/ollama
 
 # Check if Ollama is already installed and if we should reinstall
-if [ -d "$OLLAMA_PATH/bin" ] && [ -f "$OLLAMA_PATH/bin/ollama" ] && [ "$reinstall_ollama" != "true" ]; then
+if [ -d "$OLLAMA_PATH/bin" ] && [ -f "$OLLAMA_PATH/bin/ollama" ] && [ "$reinstall_ollama" != "True" ]; then
     echo "Ollama is already installed and reinstall flag is not set. Skipping Ollama installation."
 else
-    if [ -d "$OLLAMA_PATH" ] && [ "$reinstall_ollama" = "true" ]; then
+    if [ -d "$OLLAMA_PATH" ] && [ "$reinstall_ollama" = "True" ]; then
         echo "Removing existing Ollama installation for reinstallation..."
         rm -rf $OLLAMA_PATH
     fi

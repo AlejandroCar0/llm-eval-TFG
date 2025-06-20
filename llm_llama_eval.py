@@ -69,7 +69,7 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
         sftp.put(localpath=f"{EXECUTION_PATH}/gpu_exporter/gpu_export_metrics.py", remotepath=f"{WORKING_PATH}/gpu_exporter/gpu_export_metrics.py")
     #Ejecutamos el script configurations.sh en el servidor
     run_command(ssh, f"chmod 755 {WORKING_PATH}/configurations.sh")
-    run_command(ssh, f"{WORKING_PATH}/configurations.sh {password} {ollama_version} {node_version}")
+    run_command(ssh, f'{WORKING_PATH}/configurations.sh "{password}" {ollama_version} {node_version} {reinstall_ollama}')
 
     #arrancamos el script de exportacion
     """
@@ -118,7 +118,7 @@ def validate_node_exporter_version(ctx,param,valor: str) -> str:
 
 @click.command()
 @click.option("--user", "-u", help="Name of the user to connect in target destination",default = "root")
-@click.option("--password", "-p", help="Password of the user to connect in target destination", default = "")
+@click.option("--password", "-p", required = True, help="Password of the user to connect in target destination", default = "")
 @click.option("--ip-address", "-i", required=True, callback=validarIp, help="Ip-Address of the host where the test it's going to be executed")
 @click.option("--ollama-version", "-ov", callback=validate_ollama_version, help="ollama version to install in the SUT you must put the \"vx.x.x\"", default = "v0.7.0")
 @click.option("--node-version", "-nv", callback=validate_node_exporter_version, help="node_exporter version to install in the SUT you must put the \"vx.x.x\"", default = "v1.9.1")
