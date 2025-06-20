@@ -46,7 +46,7 @@ def is_gpu_available(ssh):
 
     logger.info_color(f"Checking if GPU is available")
 
-    _, stdout, _ = run_command(ssh, f"nvidia-smi")
+    _, stdout, _ = run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/detect_gpu.py")
 
     if stdout.channel.recv_exit_status() == 0:
         logger.info_color(f"GPU is available")
@@ -66,8 +66,12 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
     with ssh.open_sftp() as sftp:
         sftp.put(localpath=f"{EXECUTION_PATH}/configurations.sh", remotepath=f"{WORKING_PATH}/configurations.sh")
         sftp.put(localpath=f"{EXECUTION_PATH}/gpu_exporter/requirements.txt", remotepath=f"{WORKING_PATH}/gpu_exporter/requirements.txt")
+        sftp.put(localpath=f"{EXECUTION_PATH}/gpu_exporter/detect_gpu.py", remotepath=f"{WORKING_PATH}/gpu_exporter/detect_gpu.py")
         sftp.put(localpath=f"{EXECUTION_PATH}/gpu_exporter/gpu_export_metrics.py", remotepath=f"{WORKING_PATH}/gpu_exporter/gpu_export_metrics.py")
     #Ejecutamos el script configurations.sh en el servidor
+    run_command(ssh, f"chmod 777 {WORKING_PATH}/gpu_exporter/*")
+    run_command(ssh,f"python3 -m venv {WORKING_PATH}/venv")
+    run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install -r {WORKING_PATH}/gpu_exporter/requirements.txt")
     run_command(ssh, f"chmod 755 {WORKING_PATH}/configurations.sh")
     run_command(ssh, f'{WORKING_PATH}/configurations.sh "{password}" {ollama_version} {node_version} {reinstall_ollama}')
 
@@ -83,9 +87,6 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
 
 def gpu_exporter_configuration(ssh: paramiko.SSHClient):
     #arrancamos el script de exportacion
-    run_command(ssh, f"chmod 777 {WORKING_PATH}/gpu_exporter/*")
-    run_command(ssh,f"python3 -m venv {WORKING_PATH}/venv")
-    run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install -r {WORKING_PATH}/gpu_exporter/requirements.txt")
     run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
 
 #Funcion llamada por el callback para validar/procesar la dir ip
