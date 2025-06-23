@@ -80,7 +80,7 @@ def line_graphic(df: pd.DataFrame, columns, title):
 def deploy_three_chart(charts: list):
 
     cols = st.columns(3)
-    for i in range(len(charts)):
+    for i in range(min(len(charts), len(cols))):
         cols[i].bokeh_chart(charts[i], use_container_width=True)
 
 #Empieza el codigo principal:
@@ -104,6 +104,6 @@ p2 = line_graphic(dataframe,["cpu","gpu_utilization"], "GPU&CPU")
 p3 = line_graphic(dataframe,["gpu_utilization","memory"], "GPU&Memory")
 
 deploy_three_chart([p1,p2,p3])
-deploy_three_chart([p1,p2,p3])
+deploy_three_chart([p1,p2])
 
 #st.markdown("---")
