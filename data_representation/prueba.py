@@ -1,55 +1,96 @@
 import streamlit as st
 import pandas as pd
 import os
-import matplotlib.pyplot as plt
-from matplotlib.ticker import StrMethodFormatter
+from bokeh.plotting import figure
+from bokeh.models import HoverTool, ColumnDataSource, DatetimeTickFormatter
+from bokeh.layouts import column
+from bokeh.palettes import Category10
+
+#This line activates the wide mode for the web page
+st.set_page_config(layout="wide")
+
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 METRICS_PATH = f"{EXECUTION_PATH}/../metrics"
-def dataframe_from_csv(csv_path: str) -> pd.DataFrame: 
-    with open(f"{csv_path}", "r") as f:
-        data = f.readlines()
 
-    headers = data[0].strip().split(";")
-    data_lines = data[1:]
-    data_lines = [datita.strip().split(";") for datita in data_lines]
-    rows = []
-    dataframe = pd.DataFrame()
-    for i, name in enumerate(headers):
-        dataframe[name] = [float(row[i]) for row in data_lines]
-    dataframe["timestamp"] = pd.to_datetime(dataframe["timestamp"],unit = "s")
-    return dataframe
 
-def grafico_lineas(dataframe: pd.DataFrame, metric :str):
-    fig, ax = plt.subplots()
-    ax.plot(dataframe["timestamp"], dataframe[metric],'go--', linewidth=2, markersize=12, color = "red")
-    labels = [f"{float(item):.2f}%" for item in ax.get_yticks()]
-    ax.set_yticklabels(labels)
+def get_dataframe(csv_path: str) -> pd.DataFrame:
 
-    #Titulos y etiquetas
-    ax.set_title(f"------{metric}------",fontsize=20, fontweight='bold', color='#333333', pad=20)
-    ax.set_xlabel('Tiempo (min)', fontsize=14, fontweight='bold', color='#555555', labelpad=15)
-    ax.set_ylabel(f"{metric}", fontsize=14, fontweight='bold', color='#555555', labelpad=15)
+    raw_data = pd.read_csv(csv_path,sep = ";", dtype=str)
+    df = raw_data.apply(pd.to_numeric, errors = "coerce")
 
-    # Estetico
-    ax.tick_params(axis='x', rotation=45)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit = "s")
+
+
+    return df
+
+
+def line_graphic(df: pd.DataFrame, columns, title):
+    df_plot = df.copy()
+    df_plot["timestamp_str"] = df_plot["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    source = ColumnDataSource(df_plot)
+
+    p = figure(
+        x_axis_type="datetime",
+        title=f"{title}",
+        width=900,
+        height=400,
+        tools="pan,wheel_zoom,box_zoom,reset,save",
+        toolbar_location="above"
+    )
+
+    colors = Category10[10]
+
+    for i, col in enumerate(columns):
+        p.line(
+            x='timestamp',
+            y=col,
+            source=source,
+            line_width=2,
+            color=colors[i % len(colors)],
+            legend_label=col
+        )
+    hover = HoverTool(tooltips=[
+            ("Time", "@timestamp_str"),
+            *[(col, f"@{col}") for col in columns]
+        ],
+        mode = "vline"
+        )
     
-    
-    ax.grid(True, linestyle='--', alpha=0.6)
+    p.add_tools(hover)
 
-    # Fondo blanco con borde gris claro
-    ax.set_facecolor("#000000")
-    fig.patch.set_facecolor("#00C3FFFF")
+    p.xaxis.formatter = DatetimeTickFormatter(
+        seconds=["%H:%M:%S"],
+        minsec=["%H:%M:%S"],
+        minutes=["%H:%M:%S"],
+        hourmin=["%H:%M:%S"],
+        hours=["%H:%M:%S"],
+        days=["%H:%M:%S"],
+        months=["%H:%M:%S"],
+        years=["%H:%M:%S"],
+    )
 
-    # Mejorar la apariencia de los ticks
-    ax.tick_params(axis='both', which='major', labelsize=12, colors="#000000")
+    p.legend.location = "top_left"
+    p.legend.click_policy = "hide"
+    p.xaxis.axis_label = "Timestamp"
+    p.yaxis.axis_label = "Value"
 
-    return fig
+    return p
+
+
+def deploy_three_chart(charts: list):
+
+    cols = st.columns(3)
+    for i in range(len(charts)):
+        cols[i].bokeh_chart(charts[i], use_container_width=True)
+
+#Empieza el codigo principal:
 
 st.title("Visualización de resultados de benchmarks")
 
+
 # Carga del CSV (pon la ruta correcta a tu archivo)
 
-dataframe = dataframe_from_csv(f"{METRICS_PATH}/prometheus_metrics.csv")
+dataframe = get_dataframe(f"{METRICS_PATH}/prometheus_metrics.csv")
 
 
 st.subheader("Previsualizacion del dataframe:")
@@ -57,22 +98,12 @@ st.subheader("Previsualizacion del dataframe:")
 st.write("Datos cargados:")
 st.dataframe(dataframe)
 
-#resumir datos
-dataframe = dataframe.iloc[::2, :]
-# Puedes mostrar gráficos, por ejemplo:
-columnas = dataframe.select_dtypes(include = ['number']).columns.to_list()
 
+p1 = line_graphic(dataframe,["cpu","memory"], "CPU&Memory")
+p2 = line_graphic(dataframe,["cpu","gpu_utilization"], "GPU&CPU")
+p3 = line_graphic(dataframe,["gpu_utilization","memory"], "GPU&Memory")
 
-for columna in columnas:
-    st.pyplot(grafico_lineas(dataframe,columna))
-"""
-st.write(columnas)
-graficos = ["Barras","linea","area"]
+deploy_three_chart([p1,p2,p3])
+deploy_three_chart([p1,p2,p3])
 
-graphic = st.selectbox("Select graphic type:", graficos)
-eje_x = "timestamp"
-col_scatter_y = st.selectbox("Select metric to show", columnas, index=1)
-if col_scatter_y:
-    st.pyplot(grafico_lineas(dataframe,eje_x,ejey=col_scatter_y,titulo="Prueba"))
-"""
-st.markdown("---")
+#st.markdown("---")
