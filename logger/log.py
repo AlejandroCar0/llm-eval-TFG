@@ -1,5 +1,9 @@
 import logging
+import logging.handlers
 from rich.logging import RichHandler
+import os
+
+EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 
 class Log(logging.Logger):
     
@@ -15,9 +19,10 @@ class Log(logging.Logger):
             super().debug(f"[i bold green]{msg}", extra= {"markup" : True}, stacklevel=2)
 
 
+file_handler = logging.FileHandler(f"{EXECUTION_PATH}/logs.txt", mode = "w")
 FORMAT = "%(asctime)s - %(message)s"
 logging.basicConfig(
-    level = "NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+    level = "NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler(), file_handler]
 )
 logging.setLoggerClass(Log)
 logger = logging.getLogger("llm-eval")
