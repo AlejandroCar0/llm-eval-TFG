@@ -5,6 +5,8 @@ import paramiko
 import time
 import datetime
 import shutil
+
+import paramiko.ssh_exception
 from logger.log import logger
 from ollama.ollama_handler import OllamaHandler
 from prometheus.prometheus import Prometheus
@@ -26,22 +28,67 @@ def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.Channel
 
     return (stdin,stdout,stderr)
 
+def connect_with_private_key(ssh: paramiko.SSHClient, user: str, ip_address: str, private_key_file: str) -> None:
+    try:
+        logger.debug_color(f"Connecting with the server using file: {private_key_file}")
+        pkey = paramiko.RSAKey.from_private_key_file(private_key_file)
+        ssh.connect(ip_address, username = user, pkey = pkey)
+
+    except paramiko.AuthenticationException as e:
+        logger.warning_color(f'Error on the authentication: {e}')
+        raise
+    
+    except paramiko.SSHException as e:
+        logger.warning_color(f'Error in the ssh protocol: {e}')
+        raise
+    
+    except Exception as e:
+        logger.warning_color(f'Error: {e}')
+        raise
+
+
+def connect_with_password(ssh: paramiko.SSHClient, user: str, password: str, ip_address: str):
+    try:
+        logger.debug_color(f'Connecting with the server using password ****')
+        ssh.connect(ip_address, username = user, password = password)
+
+    except paramiko.AuthenticationException as e:
+        logger.warning_color(f'Error on the authentication: {e}')
+        raise
+
+    except paramiko.SSHException as e:
+        logger.warning_color(f'Error in the ssh protocol: {e}')
+        raise
+    
+    except Exception as e:
+        logger.warning_color(f'Error: {e}')
+        raise 
+    
 def connection_establishment(user: str, password: str, ip_address: str, private_key_file: str) -> paramiko.SSHClient:
+    logger.debug_color("Starting connection....")
+
     ssh = paramiko.SSHClient()
     #If is the first time connecting to a new server, will automatically save the public key into the .ssh/known_hosts file
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.load_system_host_keys()
-    try:
-        logger.debug_color(f"\[+] Connecting with the server... [/]")
 
-        pkey = paramiko.RSAKey.from_private_key_file(private_key_file)
-        ssh.connect(ip_address, username = user, pkey = pkey)
-        logger.debug_color(f"\[+] connection established[/]")
-    except paramiko.AuthenticationException as e:
-        logger.warning(f"\[!] connection failed with key located in {private_key_file}")
-        logger.warning(f"\[+] Retrying with the password provided")
-        ssh.connect(ip_address, username = user, password = password)
-        logger.debug_color(f"\[+] connection established[/]")
+    try:
+        connect_with_private_key(ssh, user = user, ip_address = ip_address, private_key_file = private_key_file)
+
+    except (paramiko.AuthenticationException, paramiko.SSHException, Exception):
+        logger.warning_color(f'Retrying...')
+
+        try:
+            if not password:
+                raise Exception(f"Impossible to connect with SSH to {ip_address}")
+            
+            connect_with_password(ssh = ssh, user = user, password = password, ip_address = ip_address)
+            
+
+        except (paramiko.AuthenticationException, paramiko.SSHException, Exception):
+            raise Exception(f"Impossible to connect with SSH to {ip_address}")
+    
+    logger.debug_color("Connection established!")
 
     return ssh
 
@@ -77,14 +124,6 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
     run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install -r {WORKING_PATH}/gpu_exporter/requirements.txt")
     run_command(ssh, f"chmod 755 {WORKING_PATH}/configurations.sh")
     run_command(ssh, f'{WORKING_PATH}/configurations.sh "{password}" {ollama_version} {node_version} {reinstall_ollama}')
-
-    #arrancamos el script de exportacion
-    """
-    run_command(ssh, f"chmod 777 {WORKING_PATH}/gpu_exporter/*")
-    run_command(ssh,f"python3 -m venv {WORKING_PATH}/venv")
-    run_command(ssh,f"{WORKING_PATH}/venv/bin/pip3 install -r {WORKING_PATH}/gpu_exporter/requirements.txt")
-    run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
-     """
 
     logger.debug_color(f"\[+] Configured environment [/]")
 
@@ -156,16 +195,13 @@ def validate_node_exporter_version(ctx,param,valor: str) -> str:
 
 @click.command()
 @click.option("--user", "-u", help="Name of the user to connect in target destination",default = "root")
-@click.option("--password", "-p", required = True, help="Password of the user to connect in target destination", default = "")
+@click.option("--password", "-p",help="Password of the user to connect in target destination", default = "")
 @click.option("--ip-address", "-i", required=True, callback=validarIp, help="Ip-Address of the host where the test it's going to be executed")
 @click.option("--ollama-version", "-ov", callback=validate_ollama_version, help="ollama version to install in the SUT you must put the \"vx.x.x\"", default = "v0.7.0")
 @click.option("--node-version", "-nv", callback=validate_node_exporter_version, help="node_exporter version to install in the SUT you must put the \"vx.x.x\"", default = "v1.9.1")
-@click.option("--private-key", "-pk", help="Path to private key in .pem format for ssh authentication", default=f"{os.getenv('HOME')}/.ssh/id_rsa")
+@click.option("--private-key", "-pk", help="Path to private key(including the name) in .pem format for ssh authentication", default=f"{os.getenv('HOME')}/.ssh/id_rsa")
 @click.option("--reinstall-ollama", "-ro", is_flag=True, help="Force reinstallation of Ollama even if it's already installed", default=False)
 def procesarLLM(ip_address: str, private_key: str, user: str, password: str, ollama_version: str, node_version: str, reinstall_ollama: bool):
-     #Creacion de un cliente ssh
-    #Si no se especifica la siguiente linea no funciona nada
-    #Cargar claves con ssh-keyscan
     try:
         ssh = connection_establishment(user, password, ip_address, private_key)
         environment_configuration(ssh, password, ollama_version, node_version, reinstall_ollama)
@@ -173,6 +209,7 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
 
         if gpu_available:
             gpu_exporter_configuration(ssh)
+
         run_command(ssh, f"OLLAMA_HOST=0.0.0.0 {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &") # poner el OLLAMA_HOST
         prometheus = PrometheusHandler(ip_address, gpu_available)
         os.system("sleep 20")
@@ -189,10 +226,6 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
 
     except Exception as e:
         logger.exception_color(e)
-        prometheus.stop_collection()
-    
-    finally:
-        ssh.close()
 
 
 if __name__ == '__main__':
