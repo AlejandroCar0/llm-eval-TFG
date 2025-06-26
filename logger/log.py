@@ -19,8 +19,8 @@ class Log(logging.Logger):
             super().debug(f"[i bold green]{msg}", extra= {"markup" : True}, stacklevel=2)
 
 
-file_handler = logging.FileHandler(f"{EXECUTION_PATH}/logs.txt", mode = "w")
-FORMAT = "%(asctime)s - %(message)s"
+file_handler = logging.FileHandler(f"{EXECUTION_PATH}/logs.txt", mode = "w", encoding= "utf-8")
+FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(
     level = "NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler(), file_handler]
 )
