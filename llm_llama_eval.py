@@ -2,6 +2,9 @@ import click
 import re
 import os
 import paramiko
+import time
+import datetime
+import shutil
 from logger.log import logger
 from ollama.ollama_handler import OllamaHandler
 from prometheus.prometheus import Prometheus
@@ -10,7 +13,7 @@ import threading
 WORKING_PATH = f"llm-eval"
 OLLAMA_PATH = f"{WORKING_PATH}/ollama"
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
-
+START_TIME = datetime.datetime.fromtimestamp(time.time())
     
 
 def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.ChannelFile, paramiko.ChannelFile, paramiko.ChannelFile]:
@@ -89,6 +92,40 @@ def gpu_exporter_configuration(ssh: paramiko.SSHClient):
     #arrancamos el script de exportacion
     run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
 
+def copy_file(src: str, dst: str):
+
+    try:
+        shutil.copyfile(src = src, dst = dst)
+
+    except FileNotFoundError:
+        logger.exception_color(f"ERROR file: {src} not found, impossible to copy")
+
+    except Exception as e:
+        logger.exception_color(f"Unexpected error while copying {src}, to {dst} : {e}")
+
+def save_experiments():
+    fixed_time = str(START_TIME).replace(" ","_")
+    logger.debug_color(f"Saving experiments results...")
+
+    #Defining the paths to the targets
+    experiment_dir = os.path.join(EXECUTION_PATH, "experiment_results",fixed_time)
+
+    #Tuple of tuples with (subpath, file_name)
+    files_to_copy = (
+        ("metrics", "ollama_metrics.csv"),
+        ("metrics", "prometheus_metrics.csv"),
+        ("logger", "logs.txt")
+    )
+    os.makedirs(experiment_dir, exist_ok = True)
+    
+    for subpath, file_name in files_to_copy:
+        src =  os.path.join(EXECUTION_PATH, subpath, file_name)
+        dst = os.path.join(experiment_dir, file_name)
+        copy_file(src,dst)
+
+    logger.debug_color(f"Experiments results saved!")
+    
+
 #Funcion llamada por el callback para validar/procesar la dir ip
 def validarIp(ctx,param,valor: str) -> str:
     valor = valor.lower() # Parseamos el tipo de valo
@@ -145,6 +182,7 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
         #Usar api de ollama para el texto
         ollama.process_models()
         prometheus.stop_collection()
+        save_experiments()
        
     except (paramiko.AuthenticationException, paramiko.BadHostKeyException, paramiko.SSHException) as e:
         logger.exception_color(e)
