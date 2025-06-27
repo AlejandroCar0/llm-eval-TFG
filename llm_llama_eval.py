@@ -235,7 +235,6 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
             gpu_exporter_configuration(ssh)
         run_command(ssh, f"OLLAMA_HOST=0.0.0.0 {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &") # poner el OLLAMA_HOST
         prometheus = PrometheusHandler(ip_address, gpu_available)
-        os.system("sleep 20")
         #-----Instalando LLMS-------
         ollama = OllamaHandler(ip_address)
         prometheus.start_collection()
@@ -255,6 +254,7 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
 
         if ssh:
             clean_sut_resources(ssh)
+            ssh.close()
 
 
 if __name__ == '__main__':

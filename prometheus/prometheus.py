@@ -28,10 +28,8 @@ class Prometheus():
         with open(f"{EXECUTION_PATH}/prometheus.yml", "w") as f:
             f.write(self.configuration_file)
 
-        os.system(f"prometheus --config.file={EXECUTION_PATH}/prometheus.yml >/dev/null 2>&1 &")
-
     def __str__(self):
-        to_string = f"PrometheusHandler configuration:\n"\
+        to_string = f"Prometheus configuration:\n"\
             f"RemoteHost: [{self.remote_ip_address}:{self.node_exporter_port}]\n"\
             f"TimeInterval: {self.time_interval}\n"\
             f"Configuration file:\n\n{self.configuration_file}"
@@ -41,22 +39,23 @@ class Prometheus():
         payload = {"query" : query}
         try:
             response = requests.get(self.url, params=payload)
-
+            
             if response.status_code  != 200:
-                return "Error"
+                raise Exception(f"Error in http request status code: {response.status_code}")
             
             data = response.json()
             data = data.get("data",{}).get("result",[])
 
             if not data:
-                return "Error"
+                raise Exception("Not data found in the response")
             
             data = data[0].get("value",[])
 
-            if data and len(data) > 1 and data[1]:
-                return data[1]
+            if  not data or len(data) <= 1 or not data[1]:   
+                raise Exception("Data was empty")
+            
+            return data[1]
 
-            return "Error"
         
-        except requests.exceptions.RequestException as e:
-            self.log.exception_color(f"{e}")
+        except (requests.exceptions.RequestException) as e:
+            raise Exception(f'{e}')

@@ -1,8 +1,9 @@
 import threading
 from prometheus.prometheus import Prometheus
-import threading
+import subprocess
 import os
 import time
+import requests
 from logger.log import logger
 
 
@@ -15,25 +16,59 @@ class PrometheusHandler():
 
     def __init__(self, remote_ip_address: str, gpu_available: bool):
         self.log = logger.getChild(__file__)
-        self.export_metrics = "timestamp;cpu;memory;disk_read_bytes;disk_written_bytes;disk_reads_completed;disk_writes_completed;disk_busy_time;disk_used_bytes;"
+        self.remote_ip_address = remote_ip_address
         self.gpu_available = gpu_available
 
+        self.export_metrics = "timestamp;cpu;memory;disk_read_bytes;disk_written_bytes;disk_reads_completed;disk_writes_completed;disk_busy_time;disk_used_bytes;"
         if self.gpu_available:
             self.export_metrics +="gpu_utilization;gpu_memory_used;gpu_memory_total;gpu_power_usage;gpu_temperature;gpu_encoder_util;gpu_decoder_util\n"
         else :
             self.export_metrics += "\n" 
-        self.log.debug_color(f"Starting prometheus...")
-        self.prometheus = Prometheus(remote_ip_address)
-        time.sleep(20)
-
-        self.log.debug_color(f"Prometheus started!")
+        
+        self._start_prometheus()
 
         self.stop_signal = threading.Event()
         self.collector = threading.Thread(target = self._process_metrics)
         self.collector.daemon = True
+        
         os.system(f"mkdir -p {METRICS_PATH}") #deberia hacerse al princpio de llm-eval que prepare todas las rutas
         with open(f"{METRICS_PATH}/prometheus_metrics.csv", "w") as f:
             f.write(f"{self.export_metrics}")
+
+    def _start_prometheus(self):
+        self.log.debug_color(f"Starting prometheus...")
+        self.prometheus = Prometheus(self.remote_ip_address)
+
+        process = subprocess.Popen(
+            ["prometheus",
+             f'--config.file={EXECUTION_PATH}/prometheus.yml'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        try:
+            self._wait_for_prometheus(60)
+            self.log.debug_color(f"Prometheus started!")
+
+        except Exception as e:
+            raise
+
+    def _wait_for_prometheus(self, timeout: int = 60):
+        url = f'http://127.0.0.1:9090/-/ready'
+        for i in range(timeout):
+            try:
+                response = requests.get(url, timeout=1)
+
+                if response.status_code == 200:
+                    break;
+            
+            except requests.RequestException:
+                pass
+
+            time.sleep(1)
+
+        else:
+            raise Exception(f"Faile to get up Prometheus in {timeout} seconds")
 
     def _file_to_list(self, path: str) -> list:
         result = []
@@ -48,10 +83,6 @@ class PrometheusHandler():
         self.log.debug_color("Reading querys....")
 
         querys = self._file_to_list(f"{EXECUTION_PATH}/querys.txt")
-        """
-        with open(f"{EXECUTION_PATH}/querys.txt", "r") as f:
-            querys = [query.rstrip("\n") for query in f]
-         """
         if self.gpu_available:
             querys.extend(self._file_to_list(f"{EXECUTION_PATH}/gpu_querys.txt"))
 
@@ -64,10 +95,15 @@ class PrometheusHandler():
             values = []
             values.append(str(time.time()))
             for query in querys:
-                self.log.debug_color(f"Doing query: \[{query}]")
-                data = str(self.prometheus.query(query))
-                values.append(f"{data}")
-                self.log.debug_color(f"Query done!")
+                try:
+                    self.log.debug_color(f"Doing query: \[{query}]")
+                    data = str(self.prometheus.query(query))
+                    values.append(f"{data}")
+                    self.log.debug_color(f"Query done!")
+                except Exception as e:
+                    self.log.warning_color(f'Error in query: {query}: {e}')
+                    values.append("Error")
+
             f.write(";".join(values) + "\n")
     
     def _process_metrics(self):
