@@ -105,19 +105,40 @@ def is_gpu_available(ssh):
     logger.warning_color("No GPU detected")
     return False
 
-
+def copy_file_in_sut(sftp: paramiko.SFTPClient, local_path: str, remote_path: str):
+    try:
+        sftp.put(local_path, remote_path)
+    
+    except (paramiko.sftp.SFTPError,paramiko.SSHException) as e:
+        print("Error general de SSH/SFTP:", e)
+        raise Exception(f'General error in SSH/SFTP: {e}')
+    
+    except (Exception) as e:
+        raise Exception(f'Unexpected error {e}')
+ 
 def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_version: str, node_version: str, reinstall_ollama: bool) -> None:
     logger.debug_color(f"\[+] Setting the environment[/]")
 
     #primero tenemos que definir la ruta donde vamos a trabajar en el server remoto en este caso va a ser ${HOME}/llm-eval/
     run_command(ssh, f"mkdir -p {WORKING_PATH}/gpu_exporter")
 
-    #procedemos a copiar el archivo de configuracion para establecer las librerias y cosas necesarias en el servidor
-    with ssh.open_sftp() as sftp:
-        sftp.put(localpath=f"{EXECUTION_PATH}/configurations.sh", remotepath=f"{WORKING_PATH}/configurations.sh")
-        sftp.put(localpath=f"{EXECUTION_PATH}/gpu_exporter/requirements.txt", remotepath=f"{WORKING_PATH}/gpu_exporter/requirements.txt")
-        sftp.put(localpath=f"{EXECUTION_PATH}/gpu_exporter/detect_gpu.py", remotepath=f"{WORKING_PATH}/gpu_exporter/detect_gpu.py")
-        sftp.put(localpath=f"{EXECUTION_PATH}/gpu_exporter/gpu_export_metrics.py", remotepath=f"{WORKING_PATH}/gpu_exporter/gpu_export_metrics.py")
+    #list of files to copy and where
+    files_to_copy = (
+        ("configurations.sh", "configurations.sh"),
+        ("gpu_exporter/requirements.txt", "gpu_exporter/requirements.txt"),
+        ("gpu_exporter/detect_gpu.py", "gpu_exporter/detect_gpu.py"),
+        ("gpu_exporter/gpu_export_metrics.py", "gpu_exporter/gpu_export_metrics.py")
+    )
+    try:
+        with ssh.open_sftp() as sftp:
+            for local_file, remote_file in files_to_copy:
+                local_path = os.path.join(EXECUTION_PATH, local_file)
+                remote_path = os.path.join(WORKING_PATH, remote_file)
+                
+                copy_file_in_sut(sftp= sftp, local_path = local_path, remote_path = remote_path)
+
+    except Exception:
+        raise
     #Ejecutamos el script configurations.sh en el servidor
     run_command(ssh, f"chmod 777 {WORKING_PATH}/gpu_exporter/*")
     run_command(ssh,f"python3 -m venv {WORKING_PATH}/venv")
@@ -163,7 +184,7 @@ def extract_general_info_from_sut(ssh: paramiko.SSHClient, ip_address: str, gpu_
         data["TOTAL_MEMORY"] = f'{(mem_kb / 1024 / 1024):.2f}GB'
     
     except ValueError:
-        data["TOTAL_MEMORy"] = "Unknown"
+        data["TOTAL_MEMORY"] = "Unknown"
 
     #Ip from the SUT
     data["IP_ADDRESS"] = ip_address
