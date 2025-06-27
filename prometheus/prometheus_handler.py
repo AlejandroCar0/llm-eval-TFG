@@ -60,6 +60,7 @@ class PrometheusHandler():
                 response = requests.get(url, timeout=1)
 
                 if response.status_code == 200:
+                    time.sleep(5)
                     break;
             
             except requests.RequestException:
