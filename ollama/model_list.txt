@@ -1,2 +1,2 @@
 orca-mini
-phi3
+tinyllama

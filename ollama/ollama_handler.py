@@ -11,33 +11,71 @@ class OllamaHandler():
     def __init__(self, ip_address: str):
         self.ollama = Ollama(ip_address)
         self.log = logger.getChild(__name__)
+
         with open(f"{METRICS_PATH}/ollama_metrics.csv", "w") as f:
             f.write(f"{EXPORT_METRICS}\n")
+
         with open (f"{METRICS_PATH}/response.txt","w") as f:
             f.write(f"Model;Prompt;response\n")
         
-        self.models = self.read_models()
-        self.pull_models(self.models)
+        self.models = self.get_models()
+        self.prompts = self.read_prompts()
         
 
-    def pull_models(self, models: list) -> None:
+    def pull_models(self, models: list) -> list:
+        real_models = []
         for model in models:
             self.log.debug_color(f"Pulling model: {model}")
-            self.ollama.pull_model(model)
-            self.log.debug_color(f"Model\[{model}] downloaded")
+
+            try:
+                self.ollama.pull_model(model)
+                real_models.append(model)
+                self.log.debug_color(f"Model\[{model}] downloaded")
+            
+            except Exception as e:
+                self.log.warning_color(f'{e}')
+        
+        return real_models
 
     def read_models(self) -> list:
-        with open(f"{EXECUTION_PATH}/modelList.txt","r") as modelList:
-            models = [line.rstrip("\n") for line in modelList]
+        
+        models = []
+        models_file = os.path.join(EXECUTION_PATH, "model_list.txt")
+
+        try:
+            self.log.debug_color(f'Reading ollama models...')
+
+            with open(f"{EXECUTION_PATH}/model_list.txt","r") as modelList:
+                models = [line.rstrip("\n") for line in modelList]
+
+            self.log.debug_color(f'Ollama models read')
+
+        except FileNotFoundError:
+            self.log.warning_color(f"No file {models_file} found!!!")
+
+        return models
+    
+    def get_models(self) -> list:
+        models = self.read_models()
+        models = self.pull_models(models)
 
         return models
 
     def read_prompts(self) -> list:
         prompts = []
-        with open(f"{EXECUTION_PATH}/prompts.txt","r") as promptsList:
-            for line in promptsList:
-                line = line.rsplit("\;")
-                prompts.append(line)
+        prompts_file = os.path.join(EXECUTION_PATH, 'prompts.txt')
+
+        try:
+            self.log.debug_color(f'Reading prompts...')
+            with open(f"{EXECUTION_PATH}/prompts.txt","r") as promptsList:
+                for line in promptsList:
+                    line = line.rsplit("\;")
+                    prompts.append(line)
+
+            self.log.debug_color(f'Prompts read!')
+
+        except FileNotFoundError:
+            self.log.warning_color(f'No file {prompts_file} found!!!')
 
         return prompts
 
@@ -98,31 +136,23 @@ class OllamaHandler():
             self.log.debug_color(f"processing prompt: {prompt}")
             response = self.ollama.single_prompt(model, prompt)
             self.log.debug_color(f"Prompt processed")
-            if response.status_code ==200:
+            if response.status_code == 200:
                 data = response.json()
                 parsed_prompt += self.parse_assistant_prompt(data)
 
                 self.write_metrics(self.extract_metrics(data))
                 self.save_response(prompt, data.get('response'), model)
                 print(json.dumps(response.json(), indent = 4)) #debugging purposes
+                
             else:
-                self.log.warning_color(f"!!ERROR, el modelo {model}, fallo procesando la prompt: {prompt}\nMotivo: {response.reason}\nCuerpo:{response.text}")
+                self.log.warning_color(f"!!ERROR, model {model}, failed processing prompt: {prompt}\nReason: {response.reason}\nBody:{response.text}")
             
         
     
 
     def process_models(self):
-        models = self.models
-        prompts = self.read_prompts()
-        self.log.debug_color(f"Prompts: {prompts}")
-        #pull models
-        
-        
-        for model in models:
-            #empezamos cargando cada modelo
+        for model in self.models:
             self.load_model(model)
-            for prompt in prompts:
+
+            for prompt in self.prompts:
                 self.process_prompt(prompt, model)
-            #por cada modelo le hacemos todas las preguntas correspondientes
-            #guardamos los datos
-        #process prompts

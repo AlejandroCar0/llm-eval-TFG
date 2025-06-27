@@ -32,11 +32,13 @@ class Ollama():
         return response
     
     def pull_model(self, model: str) -> None:
-        requests.post(
+        response = requests.post(
             f"{self.url}/api/pull",
             json = {"name": model},
             stream = False # Stream out the json is for wait to the total response instead of recieving by chunks/token by token
         )
+        if response.status_code != 200:
+            raise Exception(f"Impossible to download model: {model}, you can check if the model exists in : https://ollama.com/library")
     
     def get_models(self) -> requests.Response:
         response  = requests.get(
