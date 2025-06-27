@@ -22,7 +22,9 @@ netcat-traditional \
 python3 \
 python3-venv \
 python3-pip \
-curl
+curl \
+iproute2
+
 echo $password | sudo -S apt clean && rm -rf /var/lib/apt/list/*
 
 if [ extension == "arm" ]

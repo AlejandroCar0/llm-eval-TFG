@@ -5,7 +5,7 @@ import paramiko
 import time
 import datetime
 import shutil
-
+import platform
 import paramiko.ssh_exception
 from logger.log import logger
 from ollama.ollama_handler import OllamaHandler
@@ -166,6 +166,25 @@ def save_experiments():
     logger.debug_color(f"Experiments results saved!")
     
 
+def clean_local_resources():
+    logger.debug_color(f"Cleaning up local resources...")
+
+    if platform.system() =="Windows":
+        os.system(f'taskkill /PID 9090 /F')
+    else:
+        os.system(f'kill -9 $(ss -tulnp | grep :9090 | grep -o -e "pid=.*" | cut -d "," -f1 | cut -d "=" -f2)')
+    
+    logger.debug_color(f"Local resources cleaned!")
+
+def clean_sut_resources(ssh: paramiko.SSHClient):
+    logger.debug_color(f"Cleaning up SUT resources...")
+
+    process_port_to_kill = [9100, 9115]
+    for port in process_port_to_kill:
+        ssh.exec_command(f'kill -9 $(ss -tulnp | grep :{port} | grep -o -e "pid=.*" | cut -d "," -f1 | cut -d "=" -f2)')
+    
+    logger.debug_color("SUT resources cleaned!")
+
 #Funcion llamada por el callback para validar/procesar la dir ip
 def validarIp(ctx,param,valor: str) -> str:
     valor = valor.lower() # Parseamos el tipo de valo
@@ -203,14 +222,16 @@ def validate_node_exporter_version(ctx,param,valor: str) -> str:
 @click.option("--private-key", "-pk", help="Path to private key(including the name) in .pem format for ssh authentication", default=f"{os.getenv('HOME')}/.ssh/id_rsa")
 @click.option("--reinstall-ollama", "-ro", is_flag=True, help="Force reinstallation of Ollama even if it's already installed", default=False)
 def procesarLLM(ip_address: str, private_key: str, user: str, password: str, ollama_version: str, node_version: str, reinstall_ollama: bool):
+    ssh = None
+    ollama = None
+    prometheus = None
+
     try:
         ssh = connection_establishment(user, password, ip_address, private_key)
         environment_configuration(ssh, password, ollama_version, node_version, reinstall_ollama)
         gpu_available = is_gpu_available(ssh)
-
         if gpu_available:
             gpu_exporter_configuration(ssh)
-
         run_command(ssh, f"OLLAMA_HOST=0.0.0.0 {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &") # poner el OLLAMA_HOST
         prometheus = PrometheusHandler(ip_address, gpu_available)
         os.system("sleep 20")
@@ -227,6 +248,13 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
 
     except Exception as e:
         logger.exception_color(e)
+    
+    finally:
+        clean_local_resources()
+
+        if ssh:
+            clean_sut_resources(ssh)
+
 
 
 if __name__ == '__main__':
