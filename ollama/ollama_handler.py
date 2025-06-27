@@ -6,7 +6,7 @@ from logger.log import logger
 from dateutil import parser
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 METRICS_PATH = f"{EXECUTION_PATH}/../metrics"
-EXPORT_METRICS = f"timestamp;total_duration;load_duration;prompt_eval_count;prompt_eval_duration;eval_count;eval_duration"
+EXPORT_METRICS = f"timestamp;total_duration;load_duration;prompt_eval_count;prompt_eval_duration;eval_count;eval_duration;model"
 class OllamaHandler():
     def __init__(self, ip_address: str):
         self.ollama = Ollama(ip_address)
