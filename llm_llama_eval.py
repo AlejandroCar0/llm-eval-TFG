@@ -131,6 +131,60 @@ def gpu_exporter_configuration(ssh: paramiko.SSHClient):
     #arrancamos el script de exportacion
     run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
 
+def extract_general_info_from_sut(ssh: paramiko.SSHClient, ip_address: str, gpu_available: bool):
+    data = {}
+
+    #Read info from the SO
+    _, stdout, _ = run_command(ssh, "cat /etc/os-release")
+    output  = stdout.read().decode()
+    for line in output.splitlines():
+        line = line.split("=",1)
+
+        if "URL" not in line[0]:
+            data[line[0].strip()] = line[1].strip().strip('"') 
+
+
+    #Read info from the CPU
+    _, stdout, _ = run_command(
+        ssh,
+        'grep -m 1 "model name" /proc/cpuinfo | cut -d ":" -f2'
+        )
+    output = stdout.read().decode().strip()
+    data["CPU_MODEL"] = output 
+
+    #TOTAL MEMORY in GB with 2 decimals
+    _, stdout, _ = run_command(
+        ssh,
+        'cat /proc/meminfo |  grep -m 1 "MemTotal" | cut -d ":" -f2 | xargs | cut -d " " -f1'
+        )
+    output = stdout.read().decode()
+    try:
+        mem_kb = int(output)
+        data["TOTAL_MEMORY"] = f'{(mem_kb / 1024 / 1024):.2f}GB'
+    
+    except ValueError:
+        data["TOTAL_MEMORy"] = "Unknown"
+
+    #Ip from the SUT
+    data["IP_ADDRESS"] = ip_address
+
+    if gpu_available:
+        _, stdout, _ = run_command(ssh, 'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader')
+        output = stdout.read().decode()
+        
+        data["GPU_INFO"] = output if output else "Unknown"
+    
+    return data
+
+def save_general_info(ssh, ip_address, gpu_available):
+
+    data = extract_general_info_from_sut(ssh, ip_address, gpu_available)
+
+    with open(f'{EXECUTION_PATH}/metrics/general_info.txt', "w") as f:
+        for key, value in data.items():
+            f.write(f'{key} = {value}\n')
+
+
 def copy_file(src: str, dst: str):
 
     try:
@@ -142,7 +196,7 @@ def copy_file(src: str, dst: str):
     except Exception as e:
         logger.exception_color(f"Unexpected error while copying {src}, to {dst} : {e}")
 
-def save_experiments():
+def save_experiment():
     fixed_time = str(START_TIME).replace(" ","-").replace(":","-").split(".")[0]
 
     logger.debug_color(f"Saving experiments results...")
@@ -154,6 +208,7 @@ def save_experiments():
     files_to_copy = (
         ("metrics", "ollama_metrics.csv"),
         ("metrics", "prometheus_metrics.csv"),
+        ("metrics", "general_info.txt"),
         ("logger", "logs.txt")
     )
     os.makedirs(experiment_dir, exist_ok = True)
@@ -233,6 +288,7 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
         gpu_available = is_gpu_available(ssh)
         if gpu_available:
             gpu_exporter_configuration(ssh)
+        save_general_info(ssh, ip_address, gpu_available)
         run_command(ssh, f"OLLAMA_HOST=0.0.0.0 {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &") # poner el OLLAMA_HOST
         prometheus = PrometheusHandler(ip_address, gpu_available)
         #-----Instalando LLMS-------
@@ -241,7 +297,7 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
         #Usar api de ollama para el texto
         ollama.process_models()
         prometheus.stop_collection()
-        save_experiments()
+        save_experiment()
        
     except (paramiko.AuthenticationException, paramiko.BadHostKeyException, paramiko.SSHException) as e:
         logger.exception_color(e)
