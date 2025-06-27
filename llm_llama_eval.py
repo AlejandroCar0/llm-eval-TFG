@@ -172,16 +172,17 @@ def clean_local_resources():
     if platform.system() =="Windows":
         os.system(f'taskkill /PID 9090 /F')
     else:
-        os.system(f'kill -9 $(ss -tulnp | grep :9090 | grep -o -e "pid=.*" | cut -d "," -f1 | cut -d "=" -f2)')
+        os.system(f'pkill -f prometheus')
     
     logger.debug_color(f"Local resources cleaned!")
 
 def clean_sut_resources(ssh: paramiko.SSHClient):
     logger.debug_color(f"Cleaning up SUT resources...")
 
-    process_port_to_kill = [9100, 9115]
-    for port in process_port_to_kill:
-        ssh.exec_command(f'kill -9 $(ss -tulnp | grep :{port} | grep -o -e "pid=.*" | cut -d "," -f1 | cut -d "=" -f2)')
+    process_to_kill = ["ollama", "node_exporter", "gpu_exporter"]
+    for process in process_to_kill:
+        run_command(ssh, f'pkill -f {process}')
+    
     
     logger.debug_color("SUT resources cleaned!")
 
@@ -254,7 +255,6 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
 
         if ssh:
             clean_sut_resources(ssh)
-
 
 
 if __name__ == '__main__':

@@ -1,3 +1,4 @@
 prometheus_client>=0.16.0,<0.18.0
 jetson-stats; platform_machine == "aarch64"
 nvidia-ml-py3;
+setproctitle

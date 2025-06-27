@@ -2,6 +2,9 @@ import time
 import platform
 import os
 from prometheus_client import start_http_server, Gauge
+import setproctitle
+
+setproctitle.setproctitle("gpu_exporter")
 
 def is_jetson():
     return os.path.isfile("/etc/nv_tegra_release") or 'aarch64' in platform.machine()

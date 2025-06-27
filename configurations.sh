@@ -22,8 +22,7 @@ netcat-traditional \
 python3 \
 python3-venv \
 python3-pip \
-curl \
-iproute2
+curl
 
 echo $password | sudo -S apt clean && rm -rf /var/lib/apt/list/*
 
