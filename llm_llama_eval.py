@@ -35,15 +35,15 @@ def connect_with_private_key(ssh: paramiko.SSHClient, user: str, ip_address: str
         ssh.connect(ip_address, username = user, pkey = pkey)
 
     except paramiko.AuthenticationException as e:
-        logger.warning_color(f'Error on the authentication: {e}')
+        logger.warning_color(f'Error on the authentication using private key: {e}')
         raise
     
     except paramiko.SSHException as e:
-        logger.warning_color(f'Error in the ssh protocol: {e}')
+        logger.warning_color(f'Error in the ssh protocol using private key: {e}')
         raise
     
     except Exception as e:
-        logger.warning_color(f'Error: {e}')
+        logger.warning_color(f'Error when trying to connect using private key: {e}')
         raise
 
 
@@ -53,15 +53,15 @@ def connect_with_password(ssh: paramiko.SSHClient, user: str, password: str, ip_
         ssh.connect(ip_address, username = user, password = password)
 
     except paramiko.AuthenticationException as e:
-        logger.warning_color(f'Error on the authentication: {e}')
+        logger.warning_color(f'Error on the authentication using password: {e}')
         raise
 
     except paramiko.SSHException as e:
-        logger.warning_color(f'Error in the ssh protocol: {e}')
+        logger.warning_color(f'Error in the ssh protocol using password: {e}')
         raise
     
     except Exception as e:
-        logger.warning_color(f'Error: {e}')
+        logger.warning_color(f'Error when trying to connect using password: {e}')
         raise 
     
 def connection_establishment(user: str, password: str, ip_address: str, private_key_file: str) -> paramiko.SSHClient:
@@ -143,7 +143,8 @@ def copy_file(src: str, dst: str):
         logger.exception_color(f"Unexpected error while copying {src}, to {dst} : {e}")
 
 def save_experiments():
-    fixed_time = str(START_TIME).replace(" ","_")
+    fixed_time = str(START_TIME).replace(" ","-").replace(":","-").split(".")[0]
+
     logger.debug_color(f"Saving experiments results...")
 
     #Defining the paths to the targets
