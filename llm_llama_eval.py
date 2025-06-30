@@ -134,7 +134,7 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
             for local_file, remote_file in files_to_copy:
                 local_path = os.path.join(EXECUTION_PATH, local_file)
                 remote_path = os.path.join(WORKING_PATH, remote_file)
-                
+
                 copy_file_in_sut(sftp= sftp, local_path = local_path, remote_path = remote_path)
 
     except Exception:
@@ -150,7 +150,7 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
 
 def gpu_exporter_configuration(ssh: paramiko.SSHClient):
     #arrancamos el script de exportacion
-    run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py >> pepe.txt 2>&1 &")
+    run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py > pepe.txt 2>&1 &")
 
 def extract_general_info_from_sut(ssh: paramiko.SSHClient, ip_address: str, gpu_available: bool):
     data = {}
@@ -230,6 +230,7 @@ def save_experiment():
         ("metrics", "ollama_metrics.csv"),
         ("metrics", "prometheus_metrics.csv"),
         ("metrics", "general_info.txt"),
+        ("metrics", "response.txt"),
         ("logger", "logs.txt")
     )
     os.makedirs(experiment_dir, exist_ok = True)
