@@ -1,3 +1,3 @@
 hello\;tell me a story
-give me a function in python that sums a list of numbers
-Is it possible to make a compressed list in a language other than Python
+{E} which is the capital of spain: 1xa) Barcelona, 1xb) brazil, 1xc) Madrid, 1xd) Extremadura, Respond only in JSON with the following format: {"response": "<literal response only, no context>"}
+{E} how much is 5 x 5, Respond only in JSON with the following format: {"response": "<literal response only, no context>"}

@@ -231,6 +231,7 @@ def save_experiment():
         ("metrics", "prometheus_metrics.csv"),
         ("metrics", "general_info.txt"),
         ("metrics", "response.txt"),
+        ("metrics", "models_puntuation.csv"),
         ("logger", "logs.txt")
     )
     os.makedirs(experiment_dir, exist_ok = True)

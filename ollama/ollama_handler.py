@@ -1,4 +1,5 @@
 from ollama.ollama import Ollama
+import re
 import os
 import sys
 import json
@@ -18,8 +19,14 @@ class OllamaHandler():
         with open (f"{METRICS_PATH}/response.txt","w") as f:
             f.write(f"Model;Prompt;response\n")
         
+        with open (f"{METRICS_PATH}/models_puntuation.csv", "w") as f:
+            f.write(f"Model;Puntuation\n")
+        
         self.models = self.get_models()
         self.prompts = self.read_prompts()
+        self.answers = self.read_answers()
+        self.answer_index = 0
+        self.model_point = 0
         
 
     def pull_models(self, models: list) -> list:
@@ -38,7 +45,6 @@ class OllamaHandler():
         return real_models
 
     def read_models(self) -> list:
-        
         models = []
         models_file = os.path.join(EXECUTION_PATH, "model_list.txt")
 
@@ -60,6 +66,20 @@ class OllamaHandler():
         models = self.pull_models(models)
 
         return models
+    
+    def read_answers(self) -> list:
+        answers = []
+        answers_file = os.path.join(EXECUTION_PATH, 'answers.txt')
+
+        try:
+
+            with open(f'{EXECUTION_PATH}/answers.txt', 'r') as answersList:
+                answers = [line.rstrip("\n") for line in answersList]
+
+        except FileNotFoundError:
+            self.log.warning_color(f"No file {answers_file} found!!!")
+        
+        return answers
 
     def read_prompts(self) -> list:
         prompts = []
@@ -125,6 +145,46 @@ class OllamaHandler():
         with open(f"{METRICS_PATH}/response.txt", "a") as f:
             f.write(f"Model: {model};Prompt:{prompt};Response: {response}\n")
 
+    def parse_response(self, response: str) -> str:
+        parse_response = ""
+        parse_response = re.search(r'\{.*?\}', response, re.DOTALL)
+        if parse_response:
+            parse_response = parse_response.group()
+            parse_response = parse_response.lower()
+            try:
+               parse_response = json.loads(parse_response)
+
+               if "response" not in parse_response:
+                   raise Exception()
+            
+            except (json.JSONDecodeError,Exception):
+                parse_response = json.loads('{"response": "Bad format for the response"}')
+
+        else:
+            parse_response = json.loads('{"response": "Bad format for the response"}')
+        #Debug
+        self.log.warning_color(f"{json.dumps(parse_response, indent=4)}")
+
+        return parse_response
+
+    def evaluate_response(self, response: str, model: str, possible_answers: str) -> int:
+        response = self.parse_response(response)
+        response = str(response['response'])
+
+        possible_answers = possible_answers.lower()
+        #Split if real_response can have different options for example if the model answer with d and option d is Spain you can have d | spain
+        possible_answers = possible_answers.split("|")
+        for answer in possible_answers:
+            if answer in response:
+                #Debug
+                self.log.warning_color(f"Si, la respuesta: {answer} se encuentra en {response}")
+                return 1
+            
+            else:
+                #Debug
+                self.log.warning_color(f"No, la respuesta: {answer} no se encuentra en {response}")
+        
+        return 0
 
     def process_prompt(self, prompts: list, model: str) -> None:
         messages = []
@@ -140,6 +200,10 @@ class OllamaHandler():
                 data = response.json()
                 parsed_prompt += self.parse_assistant_prompt(data)
 
+                if "{E}" in prompt:
+                    self.model_point += self.evaluate_response(data.get('response'), model, self.answers[self.answer_index])
+                    self.answer_index += 1
+
                 self.write_metrics(self.extract_metrics(data))
                 self.save_response(prompt, data.get('response'), model)
                 print(json.dumps(response.json(), indent = 4)) #debugging purposes
@@ -153,6 +217,13 @@ class OllamaHandler():
     def process_models(self):
         for model in self.models:
             self.load_model(model)
+            self.answer_index = 0
+            self.model_point = 0
 
             for prompt in self.prompts:
                 self.process_prompt(prompt, model)
+            
+            model_final_mark = (self.model_point*10)/len(self.answers) if self.model_point != 0 else 0
+
+            with open(f"{METRICS_PATH}/models_puntuation.csv", "a") as f:
+                f.write(f'{model};{model_final_mark}\n')
