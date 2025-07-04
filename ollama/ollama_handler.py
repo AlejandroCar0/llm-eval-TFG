@@ -19,8 +19,8 @@ class OllamaHandler():
         with open (f"{METRICS_PATH}/response.txt","w") as f:
             f.write(f"Model;Prompt;response\n")
         
-        with open (f"{METRICS_PATH}/models_puntuation.csv", "w") as f:
-            f.write(f"Model;Puntuation\n")
+        with open (f"{METRICS_PATH}/models_score.csv", "w") as f:
+            f.write(f"Model;Score\n")
         
         self.models = self.get_models()
         self.prompts = self.read_prompts()
@@ -225,5 +225,5 @@ class OllamaHandler():
             
             model_final_mark = (self.model_point*10)/len(self.answers) if self.model_point != 0 else 0
 
-            with open(f"{METRICS_PATH}/models_puntuation.csv", "a") as f:
+            with open(f"{METRICS_PATH}/models_score.csv", "a") as f:
                 f.write(f'{model};{model_final_mark}\n')
