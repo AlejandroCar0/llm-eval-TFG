@@ -26,3 +26,13 @@ prometheus --version will work
 Take the path where prometheus has been installed, example : /home/pepe/prometheus/
 
 export PATH=$HOME/prometheus/:$PATH
+
+
+## Install de requirements.txt in your virual-env to run the project
+
+Use pip install -r requirements.txt
+
+
+## Run the llm_llama_eval.py
+
+Use python3 llm_llama_eval.py --help and follow the instructions
