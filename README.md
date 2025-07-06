@@ -36,3 +36,14 @@ Use pip install -r requirements.txt
 ## Run the llm_llama_eval.py
 
 Use python3 llm_llama_eval.py --help and follow the instructions
+
+
+## Once you have ran your experiment you can watch for the results using streamlit
+
+user streamlit run data_representation/app.py
+
+Then follow the URL that streamlit gives to you, and upload the files in this order:
+- Ollama metrics
+- Models scores
+- Prometheus metrics
+- General inforamtion

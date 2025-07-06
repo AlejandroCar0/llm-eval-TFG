@@ -98,8 +98,8 @@ def print_txt_file(file):
 def get_dataframe(file: str) -> pd.DataFrame:
     data = pd.read_csv(file,delimiter=";")
     for col in data.columns:
-        if col != "Model":
-            data[col].apply(pd.to_numeric, errors = "coerce")
+        if col != "model":
+           data[col] = data[col].apply(pd.to_numeric, errors = "coerce")
 
     data["timestamp"] = pd.to_datetime(data["timestamp"], unit = "s")
 
@@ -130,7 +130,7 @@ fusion_df = pd.merge_asof(ollama_df,prometheus_df, on="timestamp", direction="ba
 
 st.dataframe(fusion_df)
 models = []
-models = set(ollama_df['model'])
+models = ollama_df['model'].unique()
 
 columns = [
     ['total_duration', 
@@ -175,6 +175,8 @@ for column in columns:
             deploy_three_chart(charts)
             i = 0
             charts = []
+    if len(charts) > 0:
+        deploy_three_chart(charts)
 
 
 st.markdown("### Models marks:")
@@ -204,3 +206,5 @@ for column in columns:
         deploy_three_chart(charts)
         i = 0
         charts = []
+if len(charts) > 0:
+    deploy_three_chart(charts)

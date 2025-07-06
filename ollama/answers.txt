@@ -1,2 +1,4 @@
 1xc|Madrid
 25
+250
+Pikachu|1xc
