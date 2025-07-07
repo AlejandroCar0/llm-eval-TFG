@@ -2,12 +2,22 @@ import streamlit as st
 import pandas as pd
 import os
 import random
+import argparse
+import sys
 from bokeh.plotting import figure
 from bokeh.models import HoverTool, ColumnDataSource, DatetimeTickFormatter
 from bokeh.layouts import column
 from bokeh.palettes import Category10
 
 st.set_page_config(layout="wide")
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='LLM Evaluation Dashboard')
+parser.add_argument('--directory', '-d', type=str, help='Directory containing the metrics files')
+args = parser.parse_args()
+
+# Global variable to store the directory path
+METRICS_DIRECTORY = args.directory
 
 
 def line_graphic(df: pd.DataFrame, columns, title, random_color: bool = False):
@@ -81,22 +91,73 @@ def deploy_three_chart(charts: list):
 
 
 def wait_for_file(file_name: str, file_type: str):
-    file = st.file_uploader(f"Upload your {file_name}", type = file_type)
-
-    if not file:
-        st.markdown(f"### Waiting for {file_name}")
-        st.stop()
+    if METRICS_DIRECTORY:
+        # Auto-load from directory
+        return load_file_from_directory(file_name, file_type)
     else:
-        st.success(f"File {file.name} uploaded!")
+        # Interactive file upload
+        file = st.file_uploader(f"Upload your {file_name}", type = file_type)
+
+        if not file:
+            st.markdown(f"### Waiting for {file_name}")
+            st.stop()
+        else:
+            st.success(f"File {file.name} uploaded!")
+        
+        return file
+
+def load_file_from_directory(file_name: str, file_type: str):
+    """Load file from the specified directory based on file name pattern"""
+    if not os.path.exists(METRICS_DIRECTORY):
+        st.error(f"Directory {METRICS_DIRECTORY} does not exist!")
+        st.stop()
     
-    return file
+    # Define file mapping based on expected file names
+    file_patterns = {
+        "ollama_metrics_file": ["ollama_metrics.csv", "ollama_metrics*.csv"],
+        "ollama_score_file": ["models_score.csv", "models_puntuation.csv", "*score*.csv"],
+        "Prometheus_metrics_file": ["prometheus_metrics.csv", "prometheus_metrics*.csv"],
+        "General_info": ["general_info.txt", "general_info*.txt"]
+    }
+    
+    patterns = file_patterns.get(file_name, [f"{file_name}.{file_type}"])
+    
+    for pattern in patterns:
+        if "*" in pattern:
+            import glob
+            files = glob.glob(os.path.join(METRICS_DIRECTORY, pattern))
+            if files:
+                file_path = files[0]  # Take the first match
+                break
+        else:
+            file_path = os.path.join(METRICS_DIRECTORY, pattern)
+            if os.path.exists(file_path):
+                break
+    else:
+        st.error(f"Could not find file matching patterns {patterns} in directory {METRICS_DIRECTORY}")
+        st.stop()
+    
+    st.success(f"Loaded {file_name} from: {file_path}")
+    return file_path
 
 def print_txt_file(file):
-    content = file.read().decode("utf-8")
+    if isinstance(file, str):
+        # File path - read from disk
+        with open(file, 'r', encoding='utf-8') as f:
+            content = f.read()
+    else:
+        # File object - read content
+        content = file.read().decode("utf-8")
     st.text_area("General information from the sut", content, height=300)
 
-def get_dataframe(file: str) -> pd.DataFrame:
-    data = pd.read_csv(file,delimiter=";")
+def get_dataframe(file) -> pd.DataFrame:
+    if isinstance(file, str):
+        # File path - read from disk
+        data = pd.read_csv(file, delimiter=";")
+    else:
+        # File object - read content
+        data = pd.read_csv(file, delimiter=";")
+    
     for col in data.columns:
         if col != "model":
            data[col] = data[col].apply(pd.to_numeric, errors = "coerce")
@@ -110,12 +171,24 @@ ollama_file = wait_for_file("ollama_metrics_file", file_type = "csv")
 ollama_score_file = wait_for_file("ollama_score_file", file_type = "csv")
 prometheus_metrics_file = wait_for_file("Prometheus_metrics_file", file_type = "csv")
 general_info_file = wait_for_file("General_info", file_type = "txt")
+
+# Display mode information
+if METRICS_DIRECTORY:
+    st.header(f"📁 Loading files from directory: {METRICS_DIRECTORY}")
+else:
+    st.header("📤 Interactive file upload mode")
+
 print_txt_file(general_info_file)
 
 
 ollama_df = get_dataframe(ollama_file)
 prometheus_df = get_dataframe(prometheus_metrics_file)
-score_df = pd.read_csv(ollama_score_file, delimiter = ";")
+
+# Handle score_df loading for both file objects and file paths
+if isinstance(ollama_score_file, str):
+    score_df = pd.read_csv(ollama_score_file, delimiter = ";")
+else:
+    score_df = pd.read_csv(ollama_score_file, delimiter = ";")
 
 ollama_df['total_duration'] = (ollama_df['total_duration'] / 1e9).round(2)
 ollama_df['load_duration'] = (ollama_df['load_duration'] / 1e9).round(2)
