@@ -1,5 +1,4 @@
 import requests
-import re
 import os
 EXEC_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -31,7 +30,7 @@ def _update_versions(repo_name: str, file_name: str):
     try:
         with open(f"{EXEC_PATH}/{file_name}", "w") as f:
             f.write("\n".join(versions))
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         print(f"File {file_name} not found in directory: {EXEC_PATH}")
     
 

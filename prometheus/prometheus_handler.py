@@ -36,7 +36,7 @@ class PrometheusHandler():
             f.write(f"{self.export_metrics}")
 
     def _start_prometheus(self):
-        self.log.debug_color(f"Starting prometheus...")
+        self.log.debug_color("Starting prometheus...")
         self.prometheus = Prometheus(self.remote_ip_address)
 
         process = subprocess.Popen(
@@ -48,20 +48,20 @@ class PrometheusHandler():
 
         try:
             self._wait_for_prometheus(60)
-            self.log.debug_color(f"Prometheus started!")
+            self.log.debug_color("Prometheus started!")
 
-        except Exception as e:
+        except Exception:
             raise
 
     def _wait_for_prometheus(self, timeout: int = 60):
-        url = f'http://127.0.0.1:9090/-/ready'
+        url = 'http://127.0.0.1:9090/-/ready'
         for i in range(timeout):
             try:
                 response = requests.get(url, timeout=1)
 
                 if response.status_code == 200:
                     time.sleep(5)
-                    break;
+                    break
             
             except requests.RequestException:
                 pass
@@ -87,7 +87,7 @@ class PrometheusHandler():
         if self.gpu_available:
             querys.extend(self._file_to_list(f"{EXECUTION_PATH}/gpu_querys.txt"))
 
-        self.log.debug_color(f"Querys read!")
+        self.log.debug_color("Querys read!")
         
         return querys
 
@@ -100,7 +100,7 @@ class PrometheusHandler():
                     self.log.debug_color(f"Doing query: \[{query}]")
                     data = str(self.prometheus.query(query))
                     values.append(f"{data}")
-                    self.log.debug_color(f"Query done!")
+                    self.log.debug_color("Query done!")
                 except Exception as e:
                     self.log.warning_color(f'Error in query: {query}: {e}')
                     values.append("Error")

@@ -1,6 +1,5 @@
 import os
 import requests
-import json
 from logger.log import logger
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 class Prometheus():
@@ -10,7 +9,7 @@ class Prometheus():
         self.node_exporter_port = node_exporter_port
         self.gpu_exporter_port = gpu_exporter_port
         self.time_interval = time_interval
-        self.url = f"http://127.0.0.1:9090/api/v1/query"
+        self.url = "http://127.0.0.1:9090/api/v1/query"
         #Configurates the prometheus configuration file
         self.configuration_file = "" \
         "global:\n" \

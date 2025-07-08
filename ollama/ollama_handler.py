@@ -1,13 +1,12 @@
 from ollama.ollama import Ollama
 import re
 import os
-import sys
 import json
 from logger.log import logger
 from dateutil import parser
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 METRICS_PATH = f"{EXECUTION_PATH}/../metrics"
-EXPORT_METRICS = f"timestamp;total_duration;load_duration;prompt_eval_count;prompt_eval_duration;eval_count;eval_duration;model"
+EXPORT_METRICS = "timestamp;total_duration;load_duration;prompt_eval_count;prompt_eval_duration;eval_count;eval_duration;model"
 class OllamaHandler():
     def __init__(self, ip_address: str):
         self.ollama = Ollama(ip_address)
@@ -17,10 +16,10 @@ class OllamaHandler():
             f.write(f"{EXPORT_METRICS}\n")
 
         with open (f"{METRICS_PATH}/response.txt","w") as f:
-            f.write(f"Model;Prompt;response\n")
+            f.write("Model;Prompt;response\n")
         
         with open (f"{METRICS_PATH}/models_score.csv", "w") as f:
-            f.write(f"Model;Score\n")
+            f.write("Model;Score\n")
         
         self.models = self.get_models()
         self.prompts = self.read_prompts()
@@ -49,12 +48,12 @@ class OllamaHandler():
         models_file = os.path.join(EXECUTION_PATH, "model_list.txt")
 
         try:
-            self.log.debug_color(f'Reading ollama models...')
+            self.log.debug_color('Reading ollama models...')
 
             with open(f"{EXECUTION_PATH}/model_list.txt","r") as modelList:
                 models = [line.rstrip("\n") for line in modelList]
 
-            self.log.debug_color(f'Ollama models read')
+            self.log.debug_color('Ollama models read')
 
         except FileNotFoundError:
             self.log.warning_color(f"No file {models_file} found!!!")
@@ -86,13 +85,13 @@ class OllamaHandler():
         prompts_file = os.path.join(EXECUTION_PATH, 'prompts.txt')
 
         try:
-            self.log.debug_color(f'Reading prompts...')
+            self.log.debug_color('Reading prompts...')
             with open(f"{EXECUTION_PATH}/prompts.txt","r") as promptsList:
                 for line in promptsList:
                     line = line.rsplit("\;")
                     prompts.append(line)
 
-            self.log.debug_color(f'Prompts read!')
+            self.log.debug_color('Prompts read!')
 
         except FileNotFoundError:
             self.log.warning_color(f'No file {prompts_file} found!!!')
@@ -100,9 +99,9 @@ class OllamaHandler():
         return prompts
 
     def load_model(self, model: str) -> None:
-        self.log.debug_color(f"Loading model....")
+        self.log.debug_color("Loading model....")
         self.ollama.load_model(model)
-        self.log.debug_color(f"Model loaded!!")
+        self.log.debug_color("Model loaded!!")
 
     def parse_user_prompt(self, prompt: str)-> str:
 
@@ -195,7 +194,7 @@ class OllamaHandler():
 
             self.log.debug_color(f"processing prompt: {prompt}")
             response = self.ollama.single_prompt(model, prompt)
-            self.log.debug_color(f"Prompt processed")
+            self.log.debug_color("Prompt processed")
             if response.status_code == 200:
                 data = response.json()
                 parsed_prompt += self.parse_assistant_prompt(data)

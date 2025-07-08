@@ -1,5 +1,4 @@
 import requests
-import json
 class Ollama():
     def __init__(self, host_ip: str, host_port: str = "11434"):
         self.url = f"http://{host_ip}:{host_port}"

@@ -1,6 +1,5 @@
 import sys
 import pynvml
-import os
 import subprocess
 
 def check_nvidia_smi():

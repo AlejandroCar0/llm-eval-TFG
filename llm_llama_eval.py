@@ -9,10 +9,8 @@ import platform
 import paramiko.ssh_exception
 from logger.log import logger
 from ollama.ollama_handler import OllamaHandler
-from prometheus.prometheus import Prometheus
 from prometheus.prometheus_handler import PrometheusHandler
-import threading
-WORKING_PATH = f"llm-eval"
+WORKING_PATH = "llm-eval"
 OLLAMA_PATH = f"{WORKING_PATH}/ollama"
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
 START_TIME = datetime.datetime.fromtimestamp(time.time())
@@ -49,7 +47,7 @@ def connect_with_private_key(ssh: paramiko.SSHClient, user: str, ip_address: str
 
 def connect_with_password(ssh: paramiko.SSHClient, user: str, password: str, ip_address: str):
     try:
-        logger.debug_color(f'Connecting with the server using password ****')
+        logger.debug_color('Connecting with the server using password ****')
         ssh.connect(ip_address, username = user, password = password)
 
     except paramiko.AuthenticationException as e:
@@ -76,7 +74,7 @@ def connection_establishment(user: str, password: str, ip_address: str, private_
         connect_with_private_key(ssh, user = user, ip_address = ip_address, private_key_file = private_key_file)
 
     except (paramiko.AuthenticationException, paramiko.SSHException, Exception):
-        logger.warning_color(f'Retrying...')
+        logger.warning_color('Retrying...')
 
         try:
             if not password:
@@ -94,12 +92,12 @@ def connection_establishment(user: str, password: str, ip_address: str, private_
 
 def is_gpu_available(ssh):
 
-    logger.info_color(f"Checking if GPU is available")
+    logger.info_color("Checking if GPU is available")
 
     _, stdout, _ = run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/detect_gpu.py")
 
     if stdout.channel.recv_exit_status() == 0:
-        logger.info_color(f"GPU is available")
+        logger.info_color("GPU is available")
         return True
     
     logger.warning_color("No GPU detected")
@@ -117,7 +115,7 @@ def copy_file_in_sut(sftp: paramiko.SFTPClient, local_path: str, remote_path: st
         raise Exception(f'Unexpected error {e}')
  
 def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_version: str, node_version: str, reinstall_ollama: bool) -> None:
-    logger.debug_color(f"\[+] Setting the environment[/]")
+    logger.debug_color("\[+] Setting the environment[/]")
 
     #primero tenemos que definir la ruta donde vamos a trabajar en el server remoto en este caso va a ser ${HOME}/llm-eval/
     run_command(ssh, f"mkdir -p {WORKING_PATH}/gpu_exporter")
@@ -146,7 +144,7 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
     run_command(ssh, f"chmod 755 {WORKING_PATH}/configurations.sh")
     run_command(ssh, f'{WORKING_PATH}/configurations.sh "{password}" {ollama_version} {node_version} {reinstall_ollama}')
 
-    logger.debug_color(f"\[+] Configured environment [/]")
+    logger.debug_color("\[+] Configured environment [/]")
 
 def gpu_exporter_configuration(ssh: paramiko.SSHClient):
     #arrancamos el script de exportacion
@@ -220,7 +218,7 @@ def copy_file(src: str, dst: str):
 def save_experiment():
     fixed_time = str(START_TIME).replace(" ","-").replace(":","-").split(".")[0]
 
-    logger.debug_color(f"Saving experiments results...")
+    logger.debug_color("Saving experiments results...")
 
     #Defining the paths to the targets
     experiment_dir = os.path.join(EXECUTION_PATH, "experiment_results",fixed_time)
@@ -241,21 +239,21 @@ def save_experiment():
         dst = os.path.join(experiment_dir, file_name)
         copy_file(src,dst)
 
-    logger.debug_color(f"Experiments results saved!")
+    logger.debug_color("Experiments results saved!")
     
 
 def clean_local_resources():
-    logger.debug_color(f"Cleaning up local resources...")
+    logger.debug_color("Cleaning up local resources...")
 
     if platform.system() =="Windows":
-        os.system(f'taskkill /PID 9090 /F')
+        os.system('taskkill /PID 9090 /F')
     else:
-        os.system(f'pkill -f prometheus')
+        os.system('pkill -f prometheus')
     
-    logger.debug_color(f"Local resources cleaned!")
+    logger.debug_color("Local resources cleaned!")
 
 def clean_sut_resources(ssh: paramiko.SSHClient):
-    logger.debug_color(f"Cleaning up SUT resources...")
+    logger.debug_color("Cleaning up SUT resources...")
 
     process_to_kill = ["ollama", "node_exporter", "gpu_exporter"]
     for process in process_to_kill:
@@ -277,7 +275,7 @@ def validarIp(ctx,param,valor: str) -> str:
 def validate_ollama_version(ctx,param,valor: str) -> str:
     ollama_versions = ''
     with open(f"{EXECUTION_PATH}/versions/ollama_versions.txt","r") as versions:
-        ollama_versions = [version.rstrip(f"\n") for version in versions]
+        ollama_versions = [version.rstrip("\n") for version in versions]
 
     if valor not in ollama_versions:
         raise click.BadParameter(f"Error, version should be one of the followings: {ollama_versions}")

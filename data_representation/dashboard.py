@@ -2,17 +2,13 @@ import streamlit as st
 import pandas as pd
 import os
 import argparse
-import sys
 import logging
 import glob
-import numpy as np
 from typing import Optional
 from bokeh.models import LabelSet, BoxAnnotation
 from bokeh.plotting import figure
-from bokeh.models import HoverTool, ColumnDataSource, ColorBar
-from bokeh.layouts import column, row
-from bokeh.palettes import Category10, RdYlBu, Viridis256, Blues, Reds, Greens, Oranges, Purples, Greys
-from bokeh.transform import linear_cmap
+from bokeh.models import HoverTool, ColumnDataSource
+from bokeh.palettes import Category10, Viridis256
 import re
 
 TITLE = "LLM Profiler Dashboard"
@@ -517,11 +513,11 @@ def create_tokens_per_second_chart(model_stats: pd.DataFrame):
     return p
 
 def parse_model_info(model_name: str) -> tuple[str, float]:
-    """
-    Parse model name to extract family and parameter size.
+    """Parse model name to extract family and parameter size.
     
     Returns:
         tuple: (family_name, parameter_size_in_billions)
+
     """
     model_name = model_name.lower().strip()
     
@@ -579,11 +575,11 @@ def parse_model_info(model_name: str) -> tuple[str, float]:
     return family_name, parameter_size
 
 def get_model_families_and_colors(models: list) -> tuple[dict, dict]:
-    """
-    Get family groupings and assign colors to model families.
+    """Get family groupings and assign colors to model families.
     
     Returns:
         tuple: (family_to_models_dict, family_to_color_dict)
+
     """
     # Parse all models
     model_info = {}
@@ -616,8 +612,7 @@ def get_model_families_and_colors(models: list) -> tuple[dict, dict]:
     return family_to_models, family_colors
 
 def sort_models_by_family_and_size(models: list) -> list:
-    """
-    Sort models by family name and then by parameter size within each family.
+    """Sort models by family name and then by parameter size within each family.
     """
     model_info = [(model, *parse_model_info(model)) for model in models]
     # Sort by family name first, then by parameter size
@@ -625,8 +620,7 @@ def sort_models_by_family_and_size(models: list) -> list:
     return [model[0] for model in model_info]
 
 def get_model_color_with_shade(model: str, family_to_models: dict, family_colors: dict) -> str:
-    """
-    Get a color for a specific model based on its family and position within the family.
+    """Get a color for a specific model based on its family and position within the family.
     Models in the same family get different shades of the same base color.
     """
     family, size = parse_model_info(model)
