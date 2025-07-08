@@ -2,8 +2,36 @@ import os
 import requests
 from logger.log import logger
 EXECUTION_PATH = os.path.dirname(os.path.realpath(__file__))
+
 class Prometheus():
+    """
+    Clase base para la comunicación con la API de Prometheus.
+    
+    Gestiona la configuración dinámica del servidor Prometheus y proporciona
+    una interfaz simplificada para realizar consultas PromQL contra métricas
+    de sistema y GPU recolectadas desde exporters remotos.
+    
+    Attributes:
+        remote_ip_address (str): Dirección IP del sistema bajo prueba
+        node_exporter_port (str): Puerto del node_exporter (por defecto 9100)
+        gpu_exporter_port (str): Puerto del gpu_exporter (por defecto 9115)
+        time_interval (str): Intervalo de scraping en segundos
+        url (str): URL de la API de consultas de Prometheus
+        configuration_file (str): Configuración YAML generada dinámicamente
+    """
     def __init__(self, remote_ip_address: str, node_exporter_port: str = "9100",gpu_exporter_port: str = 9115, time_interval = "1"):
+        """
+        Inicializa la instancia de Prometheus con configuración dinámica.
+        
+        Genera automáticamente el archivo de configuración YAML para Prometheus
+        con los targets especificados para node_exporter y gpu_exporter.
+        
+        Args:
+            remote_ip_address (str): IP del sistema bajo prueba donde están los exporters
+            node_exporter_port (str, optional): Puerto del node_exporter. Por defecto "9100"
+            gpu_exporter_port (str, optional): Puerto del gpu_exporter. Por defecto 9115
+            time_interval (str, optional): Intervalo de scraping. Por defecto "1"
+        """
         self.log = logger.getChild(__file__)
         self.remote_ip_address = remote_ip_address
         self.node_exporter_port = node_exporter_port
@@ -28,6 +56,13 @@ class Prometheus():
             f.write(self.configuration_file)
 
     def __str__(self):
+        """
+        Representación en string de la configuración de Prometheus.
+        
+        Returns:
+            str: Información detallada de la configuración incluyendo
+                 host remoto, intervalo de tiempo y configuración completa
+        """
         to_string = f"Prometheus configuration:\n"\
             f"RemoteHost: [{self.remote_ip_address}:{self.node_exporter_port}]\n"\
             f"TimeInterval: {self.time_interval}\n"\
@@ -35,6 +70,21 @@ class Prometheus():
         return to_string
     
     def query(self, query: str):
+        """
+        Ejecuta una consulta PromQL contra la API de Prometheus.
+        
+        Realiza validación estricta de la respuesta HTTP y estructura de datos
+        para garantizar que se obtenga un valor válido de la métrica consultada.
+        
+        Args:
+            query (str): Consulta PromQL a ejecutar
+            
+        Returns:
+            str: Valor de la métrica consultada
+            
+        Raises:
+            Exception: Si hay errores HTTP, datos vacíos o estructura inválida
+        """
         payload = {"query" : query}
         try:
             response = requests.get(self.url, params=payload)

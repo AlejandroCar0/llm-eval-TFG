@@ -17,7 +17,19 @@ START_TIME = datetime.datetime.fromtimestamp(time.time())
     
 
 def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.ChannelFile, paramiko.ChannelFile, paramiko.ChannelFile]:
-    #TODO
+    """
+    Ejecuta un comando remoto via SSH con logging y sincronización.
+    
+    Proporciona una interfaz unificada para ejecución de comandos remotos
+    con timeout configurado, logging detallado y espera síncrona del resultado.
+    
+    Args:
+        ssh (paramiko.SSHClient): Cliente SSH conectado
+        command (str): Comando a ejecutar en el sistema remoto
+        
+    Returns:
+        tuple: (stdin, stdout, stderr) del comando ejecutado
+    """
     logger.debug_color(f"Running command: {command}")
     stdin,stdout,stderr = ssh.exec_command(command, timeout=180)
     #wait for the end of the command on the remote machine
@@ -27,6 +39,23 @@ def run_command(ssh: paramiko.SSHClient, command: str) -> tuple[paramiko.Channel
     return (stdin,stdout,stderr)
 
 def connect_with_private_key(ssh: paramiko.SSHClient, user: str, ip_address: str, private_key_file: str) -> None:
+    """
+    Establece conexión SSH utilizando autenticación por clave privada.
+    
+    Método de autenticación primario que utiliza claves RSA para conexión segura.
+    Implementa manejo específico de excepciones SSH para diagnóstico detallado.
+    
+    Args:
+        ssh (paramiko.SSHClient): Cliente SSH a configurar
+        user (str): Nombre de usuario para la conexión
+        ip_address (str): Dirección IP del servidor destino
+        private_key_file (str): Ruta al archivo de clave privada
+        
+    Raises:
+        paramiko.AuthenticationException: Error de autenticación
+        paramiko.SSHException: Error en el protocolo SSH
+        Exception: Otros errores de conexión
+    """
     try:
         logger.debug_color(f"Connecting with the server using file: {private_key_file}")
         pkey = paramiko.RSAKey.from_private_key_file(private_key_file)
@@ -46,6 +75,23 @@ def connect_with_private_key(ssh: paramiko.SSHClient, user: str, ip_address: str
 
 
 def connect_with_password(ssh: paramiko.SSHClient, user: str, password: str, ip_address: str):
+    """
+    Establece conexión SSH utilizando autenticación por contraseña.
+    
+    Método de autenticación fallback cuando la clave privada no está disponible
+    o falla la autenticación por clave. Proporciona robustez en la conectividad.
+    
+    Args:
+        ssh (paramiko.SSHClient): Cliente SSH a configurar
+        user (str): Nombre de usuario para la conexión
+        password (str): Contraseña del usuario
+        ip_address (str): Dirección IP del servidor destino
+        
+    Raises:
+        paramiko.AuthenticationException: Error de autenticación
+        paramiko.SSHException: Error en el protocolo SSH
+        Exception: Otros errores de conexión
+    """
     try:
         logger.debug_color('Connecting with the server using password ****')
         ssh.connect(ip_address, username = user, password = password)
@@ -63,6 +109,25 @@ def connect_with_password(ssh: paramiko.SSHClient, user: str, password: str, ip_
         raise 
     
 def connection_establishment(user: str, password: str, ip_address: str, private_key_file: str) -> paramiko.SSHClient:
+    """
+    Establece conexión SSH robusta con autenticación dual.
+    
+    Implementa patrón de autenticación con fallback: intenta primero clave privada
+    y en caso de fallo recurre a autenticación por contraseña. Configura políticas
+    de seguridad SSH y manejo de claves de host.
+    
+    Args:
+        user (str): Nombre de usuario para la conexión
+        password (str): Contraseña (puede estar vacía si solo se usa clave privada)
+        ip_address (str): Dirección IP del servidor destino
+        private_key_file (str): Ruta al archivo de clave privada
+        
+    Returns:
+        paramiko.SSHClient: Cliente SSH conectado y listo para uso
+        
+    Raises:
+        Exception: Si ambos métodos de autenticación fallan
+    """
     logger.debug_color("Starting connection....")
 
     ssh = paramiko.SSHClient()
@@ -91,6 +156,18 @@ def connection_establishment(user: str, password: str, ip_address: str, private_
     return ssh
 
 def is_gpu_available(ssh):
+    """
+    Detecta disponibilidad de GPU NVIDIA en el sistema remoto.
+    
+    Utiliza script Python especializado para detección precisa de hardware GPU.
+    La detección se basa en el código de salida del script detector.
+    
+    Args:
+        ssh (paramiko.SSHClient): Cliente SSH conectado al sistema remoto
+        
+    Returns:
+        bool: True si hay GPU NVIDIA disponible, False en caso contrario
+    """
 
     logger.info_color("Checking if GPU is available")
 
@@ -104,6 +181,20 @@ def is_gpu_available(ssh):
     return False
 
 def copy_file_in_sut(sftp: paramiko.SFTPClient, local_path: str, remote_path: str):
+    """
+    Transfiere un archivo del sistema local al sistema remoto via SFTP.
+    
+    Proporciona transferencia segura de archivos con manejo de errores
+    específicos para operaciones SFTP y SSH.
+    
+    Args:
+        sftp (paramiko.SFTPClient): Cliente SFTP activo
+        local_path (str): Ruta del archivo local a transferir
+        remote_path (str): Ruta destino en el sistema remoto
+        
+    Raises:
+        Exception: Si la transferencia falla por errores de SFTP o SSH
+    """
     try:
         sftp.put(local_path, remote_path)
     
@@ -115,6 +206,23 @@ def copy_file_in_sut(sftp: paramiko.SFTPClient, local_path: str, remote_path: st
         raise Exception(f'Unexpected error {e}')
  
 def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_version: str, node_version: str, reinstall_ollama: bool) -> None:
+    """
+    Configura el entorno completo en el sistema remoto para evaluación de LLMs.
+    
+    Transfiere archivos necesarios, crea entornos virtuales Python, instala
+    dependencias y ejecuta scripts de configuración para Ollama y exporters.
+    Proceso crítico que prepara toda la infraestructura de evaluación.
+    
+    Args:
+        ssh (paramiko.SSHClient): Cliente SSH conectado
+        password (str): Contraseña para operaciones que requieren sudo
+        ollama_version (str): Versión específica de Ollama a instalar
+        node_version (str): Versión específica de node_exporter a instalar
+        reinstall_ollama (bool): Forzar reinstalación de Ollama si ya existe
+        
+    Raises:
+        Exception: Si falla la transferencia de archivos o configuración
+    """
     logger.debug_color("\[+] Setting the environment[/]")
 
     #primero tenemos que definir la ruta donde vamos a trabajar en el server remoto en este caso va a ser ${HOME}/llm-eval/
@@ -147,10 +255,34 @@ def environment_configuration(ssh: paramiko.SSHClient, password: str, ollama_ver
     logger.debug_color("\[+] Configured environment [/]")
 
 def gpu_exporter_configuration(ssh: paramiko.SSHClient):
+    """
+    Inicia el exportador de métricas GPU en background.
+    
+    Lanza el script gpu_export_metrics.py como proceso daemon
+    para recolección continua de métricas de GPU NVIDIA.
+    
+    Args:
+        ssh (paramiko.SSHClient): Cliente SSH conectado al sistema remoto
+    """
     #arrancamos el script de exportacion
     run_command(ssh, f"{WORKING_PATH}/venv/bin/python3 {WORKING_PATH}/gpu_exporter/gpu_export_metrics.py > pepe.txt 2>&1 &")
 
 def extract_general_info_from_sut(ssh: paramiko.SSHClient, ip_address: str, gpu_available: bool):
+    """
+    Extrae información completa del hardware y sistema operativo del SUT.
+    
+    Recolecta metadatos críticos del sistema bajo prueba incluyendo:
+    OS, CPU, memoria total y información de GPU si está disponible.
+    Esta información caracteriza completamente el entorno de evaluación.
+    
+    Args:
+        ssh (paramiko.SSHClient): Cliente SSH conectado
+        ip_address (str): IP del sistema para incluir en metadatos
+        gpu_available (bool): Si debe recolectar información de GPU
+        
+    Returns:
+        dict: Diccionario con toda la información del sistema
+    """
     data = {}
 
     #Read info from the SO
@@ -196,6 +328,17 @@ def extract_general_info_from_sut(ssh: paramiko.SSHClient, ip_address: str, gpu_
     return data
 
 def save_general_info(ssh, ip_address, gpu_available):
+    """
+    Persiste la información general del sistema en archivo de texto.
+    
+    Coordina la extracción y almacenamiento de metadatos del sistema
+    en formato clave=valor para fácil procesamiento posterior.
+    
+    Args:
+        ssh (paramiko.SSHClient): Cliente SSH conectado
+        ip_address (str): Dirección IP del sistema bajo prueba
+        gpu_available (bool): Disponibilidad de GPU en el sistema
+    """
 
     data = extract_general_info_from_sut(ssh, ip_address, gpu_available)
 
@@ -205,6 +348,16 @@ def save_general_info(ssh, ip_address, gpu_available):
 
 
 def copy_file(src: str, dst: str):
+    """
+    Copia un archivo del origen al destino con manejo de errores.
+    
+    Utility para operaciones de copia de archivos locales con
+    logging detallado de errores para debugging.
+    
+    Args:
+        src (str): Ruta del archivo origen
+        dst (str): Ruta del archivo destino
+    """
 
     try:
         shutil.copyfile(src = src, dst = dst)
@@ -216,6 +369,16 @@ def copy_file(src: str, dst: str):
         logger.exception_color(f"Unexpected error while copying {src}, to {dst} : {e}")
 
 def save_experiment():
+    """
+    Archiva todos los resultados del experimento en directorio timestampeado.
+    
+    Crea un snapshot completo del experimento incluyendo métricas de Ollama,
+    Prometheus, información del sistema, respuestas de modelos, puntuaciones
+    y logs para análisis histórico y reproducibilidad.
+    
+    El directorio se nombra con timestamp de inicio para evitar conflictos
+    y facilitar organización temporal de experimentos.
+    """
     fixed_time = str(START_TIME).replace(" ","-").replace(":","-").split(".")[0]
 
     logger.debug_color("Saving experiments results...")
@@ -243,6 +406,13 @@ def save_experiment():
     
 
 def clean_local_resources():
+    """
+    Limpia recursos y procesos locales del sistema de evaluación.
+    
+    Termina procesos de Prometheus y otros servicios locales que
+    pudieran quedar ejecutándose. Incluye manejo multiplataforma
+    para Windows y sistemas Unix.
+    """
     logger.debug_color("Cleaning up local resources...")
 
     if platform.system() =="Windows":
@@ -253,6 +423,16 @@ def clean_local_resources():
     logger.debug_color("Local resources cleaned!")
 
 def clean_sut_resources(ssh: paramiko.SSHClient):
+    """
+    Limpia procesos y recursos en el sistema bajo prueba remoto.
+    
+    Termina todos los procesos relacionados con la evaluación:
+    Ollama, node_exporter y gpu_exporter para dejar el sistema
+    en estado limpio tras la evaluación.
+    
+    Args:
+        ssh (paramiko.SSHClient): Cliente SSH conectado al SUT
+    """
     logger.debug_color("Cleaning up SUT resources...")
 
     process_to_kill = ["ollama", "node_exporter", "gpu_exporter"]
@@ -264,6 +444,23 @@ def clean_sut_resources(ssh: paramiko.SSHClient):
 
 #Funcion llamada por el callback para validar/procesar la dir ip
 def validarIp(ctx,param,valor: str) -> str:
+    """
+    Valida formato de dirección IP usando expresiones regulares.
+    
+    Callback de Click que verifica que la IP esté en formato válido
+    o sea 'localhost'. Utilizado para validación en tiempo real de CLI.
+    
+    Args:
+        ctx: Contexto de Click (no utilizado)
+        param: Parámetro de Click (no utilizado)  
+        valor (str): Valor de IP a validar
+        
+    Returns:
+        str: IP validada en minúsculas
+        
+    Raises:
+        click.BadParameter: Si el formato de IP es inválido
+    """
     valor = valor.lower() # Parseamos el tipo de valo
     pattern = "(^((25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?)\.){3}((25[0-5]|2[0-4][0-9]|[0-1]?[0-9][0-9]?))$|localhost)"
 
@@ -273,6 +470,23 @@ def validarIp(ctx,param,valor: str) -> str:
     return valor
 
 def validate_ollama_version(ctx,param,valor: str) -> str:
+    """
+    Valida que la versión de Ollama especificada esté soportada.
+    
+    Verifica contra lista de versiones válidas cargada desde archivo
+    de configuración para garantizar compatibilidad del sistema.
+    
+    Args:
+        ctx: Contexto de Click (no utilizado)
+        param: Parámetro de Click (no utilizado)
+        valor (str): Versión de Ollama a validar
+        
+    Returns:
+        str: Versión validada
+        
+    Raises:
+        click.BadParameter: Si la versión no está soportada
+    """
     ollama_versions = ''
     with open(f"{EXECUTION_PATH}/versions/ollama_versions.txt","r") as versions:
         ollama_versions = [version.rstrip("\n") for version in versions]
@@ -283,6 +497,23 @@ def validate_ollama_version(ctx,param,valor: str) -> str:
     return valor
 
 def validate_node_exporter_version(ctx,param,valor: str) -> str:
+    """
+    Valida que la versión de node_exporter especificada esté soportada.
+    
+    Verifica contra lista de versiones válidas para garantizar
+    compatibilidad con el sistema de métricas de Prometheus.
+    
+    Args:
+        ctx: Contexto de Click (no utilizado)
+        param: Parámetro de Click (no utilizado)
+        valor (str): Versión de node_exporter a validar
+        
+    Returns:
+        str: Versión validada
+        
+    Raises:
+        click.BadParameter: Si la versión no está soportada
+    """
     node_exporter_versions = ''
     with open(f"{EXECUTION_PATH}/versions/node_exporter_versions.txt","r") as versions:
         node_exporter_versions = [version.rstrip("\n") for version in versions]
@@ -299,6 +530,25 @@ def validate_node_exporter_version(ctx,param,valor: str) -> str:
 @click.option("--private-key", "-pk", help="Path to private key(including the name) in .pem format for ssh authentication", default=f"{os.getenv('HOME')}/.ssh/id_rsa")
 @click.option("--reinstall-ollama", "-ro", is_flag=True, help="Force reinstallation of Ollama even if it's already installed", default=False)
 def procesarLLM(ip_address: str, private_key: str, user: str, password: str, ollama_version: str, node_version: str, reinstall_ollama: bool):
+    """
+    Función principal que orquesta todo el proceso de evaluación de LLMs.
+    
+    Coordina el flujo completo: conexión SSH, configuración del entorno,
+    detección de hardware, inicialización de servicios, sincronización
+    de la evaluación con recolección de métricas, y archivado de resultados.
+    
+    Implementa manejo robusto de errores con cleanup garantizado de recursos
+    tanto locales como remotos mediante bloques try/except/finally.
+    
+    Args:
+        ip_address (str): IP del sistema bajo prueba
+        private_key (str): Ruta a clave privada SSH
+        user (str): Usuario para conexión SSH
+        password (str): Contraseña (opcional si se usa clave privada)
+        ollama_version (str): Versión específica de Ollama a instalar
+        node_version (str): Versión específica de node_exporter a instalar
+        reinstall_ollama (bool): Forzar reinstalación de Ollama
+    """
     ssh = None
     ollama = None
     prometheus = None
@@ -310,12 +560,10 @@ def procesarLLM(ip_address: str, private_key: str, user: str, password: str, oll
         if gpu_available:
             gpu_exporter_configuration(ssh)
         save_general_info(ssh, ip_address, gpu_available)
-        run_command(ssh, f"OLLAMA_HOST=0.0.0.0 {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &") # poner el OLLAMA_HOST
+        run_command(ssh, f"OLLAMA_HOST=0.0.0.0 {OLLAMA_PATH}/bin/ollama serve > /dev/null 2>&1 &")
         prometheus = PrometheusHandler(ip_address, gpu_available)
-        #-----Instalando LLMS-------
         ollama = OllamaHandler(ip_address)
         prometheus.start_collection()
-        #Usar api de ollama para el texto
         ollama.process_models()
         prometheus.stop_collection()
         save_experiment()
