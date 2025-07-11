@@ -5,7 +5,7 @@ import argparse
 import logging
 import glob
 from typing import Optional
-from bokeh.models import LabelSet, BoxAnnotation
+from bokeh.models import LabelSet, BoxAnnotation, Whisker, FactorRange
 from bokeh.plotting import figure
 from bokeh.models import HoverTool, ColumnDataSource
 from bokeh.palettes import Category10, Viridis256
@@ -294,115 +294,98 @@ def create_response_time_distribution(ollama_df: pd.DataFrame):
     ollama_processed = ollama_df.copy()
     ollama_processed['response_time'] = (ollama_processed['total_duration'] - ollama_processed['load_duration']) / 1e9
     
-    models = ollama_processed['model'].unique()
-    sorted_models = sort_models_by_family_and_size(models)
+    df = ollama_processed[["model", "response_time"]].rename(columns={"model": "kind", "response_time": "value"})
     
-    # Get family groupings and colors
+    models = df.kind.unique()
+    sorted_models = sort_models_by_family_and_size(models)
     family_to_models, family_colors = get_model_families_and_colors(sorted_models)
     
-    p = figure(
-        title="📊 Response Time Distribution by Model (Grouped by Family)",
+    # Compute quantiles
+    grouper = df.groupby("kind")
+    qs = grouper.value.quantile([0.25, 0.5, 0.75]).unstack().reset_index()
+    qs.columns = ["kind", "q1", "q2", "q3"]
+    
+    # Compute IQR outlier bounds
+    iqr = qs.q3 - qs.q1
+    qs["upper"] = qs.q3 + 1.5*iqr
+    qs["lower"] = qs.q1 - 1.5*iqr
+    
+    # Update the whiskers to actual data points
+    for kind, group in grouper:
+        qs_idx = qs.query(f"kind=={kind!r}").index[0]
+        data = group["value"]
+        
+        # The upper whisker is the maximum between q3 and upper
+        q3 = qs.loc[qs_idx, "q3"]
+        upper = qs.loc[qs_idx, "upper"]
+        wiskhi = group[(q3 <= data) & (data <= upper)]["value"]
+        qs.loc[qs_idx, "upper"] = q3 if len(wiskhi) == 0 else wiskhi.max()
+        
+        # The lower whisker is the minimum between q1 and lower
+        q1 = qs.loc[qs_idx, "q1"]
+        lower = qs.loc[qs_idx, "lower"]
+        wisklo = group[(lower <= data) & (data <= q1)]["value"]
+        qs.loc[qs_idx, "lower"] = q1 if len(wisklo) == 0 else wisklo.min()
+    
+    color_map = {}
+    for model in sorted_models:
+        color_map[model] = get_model_color_with_shade(model, family_to_models, family_colors)
+    
+    qs['color'] = qs['kind'].map(color_map)
+    
+    source = ColumnDataSource(qs)
+    
+    plot = figure(
         x_range=sorted_models,
+        tools="pan,wheel_zoom,box_zoom,reset,save",
+        title="📊 Response Time Distribution by Model (Grouped by Family)",
         y_axis_label="Response Time (seconds)",
         width=800,
-        height=400,
-        tools="pan,wheel_zoom,box_zoom,reset,save"
+        height=400
     )
     
-    # Prepare data for box plots
-    box_data = []
+    # Whiskers (outlier range)
+    whisker = Whisker(base="kind", upper="upper", lower="lower", source=source, line_color="black")
+    whisker.upper_head.size = whisker.lower_head.size = 10
+    plot.add_layout(whisker)
     
-    for model in sorted_models:
-        model_data = ollama_processed[ollama_processed['model'] == model]['response_time']
-        if len(model_data) == 0:
-            continue
-            
-        q1 = model_data.quantile(0.25)
-        q2 = model_data.median()
-        q3 = model_data.quantile(0.75)
-        iqr = q3 - q1
-        upper = min(model_data.max(), q3 + 1.5 * iqr)
-        lower = max(model_data.min(), q1 - 1.5 * iqr)
-        
-        # Get color for this model
-        color = get_model_color_with_shade(model, family_to_models, family_colors)
-        
-        # Find outliers
-        outliers = model_data[(model_data > upper) | (model_data < lower)]
-        
-        box_data.append({
-            'model': model,
-            'q1': q1,
-            'q2': q2,
-            'q3': q3,
-            'upper': upper,
-            'lower': lower,
-            'color': color,
-            'outliers': outliers.tolist()
-        })
+    # Quantile boxes
+    plot.vbar("kind", 0.6, "q2", "q3", source=source, color="color", line_color="black", alpha=0.7)
+    plot.vbar("kind", 0.6, "q1", "q2", source=source, color="color", line_color="black", alpha=0.7)
     
-    # Create box plots using quad for better control
+    # Outliers
+    df_with_bounds = pd.merge(df, qs[["kind", "lower", "upper"]], on="kind", how="left")
+    outliers = df_with_bounds[~df_with_bounds.value.between(df_with_bounds.lower, df_with_bounds.upper)]
+    
+    if not outliers.empty:
+        outlier_colors = [color_map.get(model, "#888888") for model in outliers["kind"]]
+        plot.scatter("kind", "value", source=ColumnDataSource(outliers.assign(color=outlier_colors)), 
+                    size=6, color="color", alpha=0.6)
+    
+    # Add hover functionality
     hover_data = []
-    
-    for data in box_data:
-        model = data['model']
-        model_index = sorted_models.index(model)  # Get numeric index for positioning
-        
-        # Prepare hover data
-        family, size = parse_model_info(model)
+    for _, row in qs.iterrows():
+        family, size = parse_model_info(row['kind'])
         hover_info = {
-            'x': model_index,
-            'y': (data['q1'] + data['q3']) / 2,  # Middle of the box for hover target
-            'model': model,
+            'x': row['kind'],
+            'y': (row['q1'] + row['q3']) / 2,
+            'model': row['kind'],
             'family': family,
             'size': f"{size}B",
-            'median': f"{data['q2']:.3f}s",
-            'q1': f"{data['q1']:.3f}s",
-            'q3': f"{data['q3']:.3f}s",
-            'iqr': f"{data['q3'] - data['q1']:.3f}s",
-            'min': f"{data['lower']:.3f}s",
-            'max': f"{data['upper']:.3f}s",
-            'outliers_count': len(data['outliers'])
+            'median': f"{row['q2']:.3f}s",
+            'q1': f"{row['q1']:.3f}s",
+            'q3': f"{row['q3']:.3f}s",
+            'iqr': f"{row['q3'] - row['q1']:.3f}s",
+            'min': f"{row['lower']:.3f}s",
+            'max': f"{row['upper']:.3f}s",
+            'outliers_count': len(outliers[outliers['kind'] == row['kind']])
         }
         hover_data.append(hover_info)
-        
-        # Box (interquartile range) - use quad for precise control
-        p.quad(top=data['q3'], bottom=data['q1'], 
-               left=model_index-0.3, right=model_index+0.3,
-               fill_color=data['color'], fill_alpha=0.7, line_color='black')
-        
-        # Median line - horizontal line across the box
-        p.segment(x0=model_index-0.3, y0=data['q2'], 
-                 x1=model_index+0.3, y1=data['q2'], 
-                 line_width=3, line_color='white')
-        
-        # Whiskers - vertical lines
-        p.segment(x0=model_index, y0=data['upper'], 
-                 x1=model_index, y1=data['q3'], 
-                 line_color='black', line_width=2)
-        p.segment(x0=model_index, y0=data['lower'], 
-                 x1=model_index, y1=data['q1'], 
-                 line_color='black', line_width=2)
-        
-        # Whisker caps - horizontal lines at the ends
-        p.segment(x0=model_index-0.1, y0=data['upper'], 
-                 x1=model_index+0.1, y1=data['upper'], 
-                 line_width=2, line_color='black')
-        p.segment(x0=model_index-0.1, y0=data['lower'], 
-                 x1=model_index+0.1, y1=data['lower'], 
-                 line_width=2, line_color='black')
-        
-        # Outliers
-        if data['outliers']:
-            p.circle(x=[model_index] * len(data['outliers']), y=data['outliers'], 
-                    size=6, color=data['color'], alpha=0.6)
     
-    # Add invisible circles for hover functionality
     if hover_data:
         hover_source = ColumnDataSource(pd.DataFrame(hover_data))
-        hover_circles = p.circle(x='x', y='y', size=20, alpha=0, source=hover_source)
+        hover_circles = plot.circle(x='x', y='y', size=20, alpha=0, source=hover_source)
         
-        # Add hover tool with detailed statistics
         hover = HoverTool(
             renderers=[hover_circles],
             tooltips=[
@@ -416,10 +399,10 @@ def create_response_time_distribution(ollama_df: pd.DataFrame):
                 ("Outliers", "@outliers_count")
             ]
         )
-        p.add_tools(hover)
+        plot.add_tools(hover)
     
-    p.xaxis.major_label_orientation = 45
-    return p
+    plot.xaxis.major_label_orientation = 45
+    return plot
 
 def create_resource_timeline(prometheus_df: pd.DataFrame, ollama_df: pd.DataFrame):
     """Create resource utilization timeline"""
@@ -509,6 +492,369 @@ def create_tokens_per_second_chart(model_stats: pd.DataFrame):
     p.add_layout(labels)
     
     p.xaxis.major_label_orientation = 45
+    
+    return p
+
+@st.cache_data
+def calculate_model_resource_usage(ollama_df: pd.DataFrame, prometheus_df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate average resource usage per model during execution periods"""
+    if ollama_df.empty or prometheus_df.empty:
+        st.warning("🔍 Resource correlation: Empty input dataframes")
+        return pd.DataFrame()
+    
+    # Check for required timestamp columns
+    if 'timestamp' not in ollama_df.columns or 'timestamp' not in prometheus_df.columns:
+        st.warning("Missing timestamp data for resource correlation")
+        return pd.DataFrame()
+    
+    st.info(f"🔍 Resource correlation: Processing {len(ollama_df)} Ollama records and {len(prometheus_df)} Prometheus records")
+    
+    model_resources = []
+    processed_count = 0
+    matched_count = 0
+    
+    for _, row in ollama_df.iterrows():
+        model = row['model']
+        start_time = row['timestamp']
+        
+        # Check if we have duration data
+        if 'total_duration' not in row or pd.isna(row['total_duration']):
+            continue
+            
+        processed_count += 1
+        duration = row['total_duration'] / 1e9  # Convert to seconds
+        end_time = start_time + pd.Timedelta(seconds=duration)
+        
+        # Find Prometheus metrics during this model execution
+        mask = (prometheus_df['timestamp'] >= start_time) & (prometheus_df['timestamp'] <= end_time)
+        execution_metrics = prometheus_df[mask]
+        
+        if not execution_metrics.empty:
+            matched_count += 1
+            # Calculate averages for this execution
+            resource_data = {'model': model}
+            
+            if 'cpu' in execution_metrics.columns:
+                resource_data['avg_cpu_utilization'] = execution_metrics['cpu'].mean()
+            
+            if 'gpu_utilization' in execution_metrics.columns:
+                resource_data['avg_gpu_utilization'] = execution_metrics['gpu_utilization'].mean()
+            
+            if 'memory' in execution_metrics.columns:
+                resource_data['avg_memory_utilization'] = execution_metrics['memory'].mean()
+            
+            if 'gpu_memory_used' in execution_metrics.columns and 'gpu_memory_total' in execution_metrics.columns:
+                gpu_memory_pct = execution_metrics.apply(
+                    lambda r: (r['gpu_memory_used'] / r['gpu_memory_total']) * 100 
+                    if r['gpu_memory_total'] > 0 else 0, axis=1
+                )
+                resource_data['avg_gpu_memory_utilization'] = gpu_memory_pct.mean()
+            
+            model_resources.append(resource_data)
+    
+    st.info(f"🔍 Resource correlation: Processed {processed_count} executions, matched {matched_count} with metrics")
+    
+    if not model_resources:
+        st.warning("🔍 No resource correlations found - check timestamp alignment between datasets")
+        return pd.DataFrame()
+    
+    # Convert to DataFrame and aggregate by model
+    resource_df = pd.DataFrame(model_resources)
+    
+    # Group by model and calculate overall averages
+    model_resource_stats = resource_df.groupby('model').agg({
+        col: 'mean' for col in resource_df.columns if col != 'model'
+    }).round(2)
+    
+    model_resource_stats = model_resource_stats.reset_index()
+    
+    return model_resource_stats
+
+def create_cpu_gpu_utilization_chart(model_resource_stats: pd.DataFrame):
+    """Create CPU and GPU utilization chart per model with family grouping"""
+    if model_resource_stats.empty:
+        st.warning("No resource utilization data available")
+        return None
+    
+    # Check for required columns
+    has_cpu = 'avg_cpu_utilization' in model_resource_stats.columns
+    has_gpu = 'avg_gpu_utilization' in model_resource_stats.columns
+    
+    if not has_cpu and not has_gpu:
+        st.warning("No CPU or GPU utilization data available")
+        return None
+    
+    models = model_resource_stats['model'].tolist()
+    sorted_models = sort_models_by_family_and_size(models)
+    
+    # Reorder data according to sorted models
+    sorted_stats = model_resource_stats.set_index('model').loc[sorted_models].reset_index()
+    
+    # Get family groupings and colors
+    family_to_models, family_colors = get_model_families_and_colors(sorted_models)
+    
+    # Prepare data for side-by-side bars
+    chart_data = []
+    for i, model in enumerate(sorted_models):
+        stats_row = sorted_stats.iloc[i]
+        family, size = parse_model_info(model)
+        base_color = get_model_color_with_shade(model, family_to_models, family_colors)
+        
+        if has_cpu:
+            chart_data.append({
+                'model': model,
+                'resource_type': 'CPU',
+                'utilization': stats_row['avg_cpu_utilization'],
+                'color': base_color,
+                'alpha': 0.9,  # More opaque for CPU
+                'line_color': '#333333',  # Dark border for CPU
+                'line_width': 3,
+                'hatch_pattern': '',  # Solid fill for CPU
+                'family': family,
+                'size': f"{size}B"
+            })
+        
+        if has_gpu:
+            # Make GPU bars with increased saturation and diagonal stripes effect
+            gpu_color = base_color
+            if base_color.startswith('#'):
+                r, g, b = tuple(int(base_color[i:i+2], 16) for i in (1, 3, 5))
+                # Increase saturation for GPU bars
+                r = min(255, int(r * 1.3))
+                g = min(255, int(g * 1.3))  
+                b = min(255, int(b * 1.3))
+                gpu_color = f"#{r:02x}{g:02x}{b:02x}"
+            
+            chart_data.append({
+                'model': model,
+                'resource_type': 'GPU',
+                'utilization': stats_row['avg_gpu_utilization'],
+                'color': gpu_color,
+                'alpha': 0.75,  # Slightly transparent for GPU
+                'line_color': '#666666',  # Medium gray border for GPU
+                'line_width': 2,
+                'hatch_pattern': '///',  # Diagonal stripes for GPU
+                'family': family,
+                'size': f"{size}B"
+            })
+    
+    chart_df = pd.DataFrame(chart_data)
+    
+    # Transform data for x axis BEFORE creating source
+    chart_df['x'] = list(zip(chart_df['model'], chart_df['resource_type']))
+    
+    source = ColumnDataSource(chart_df)
+    
+    # Create factors for grouped bars
+    factors = []
+    for model in sorted_models:
+        if has_cpu and has_gpu:
+            factors.extend([(model, 'CPU'), (model, 'GPU')])
+        elif has_cpu:
+            factors.append((model, 'CPU'))
+        elif has_gpu:
+            factors.append((model, 'GPU'))
+    
+    from bokeh.models import FactorRange
+    
+    p = figure(
+        title="⚡ Average CPU & GPU Utilization per Model (Grouped by Family)",
+        x_range=FactorRange(*factors),
+        y_axis_label="Utilization (%)",
+        width=800,
+        height=400,
+        tools="pan,wheel_zoom,box_zoom,reset,save"
+    )
+    
+    # Create bars with enhanced visual distinction
+    bars = p.vbar(
+        x='x', 
+        top='utilization', 
+        width=0.8, 
+        color='color', 
+        alpha='alpha',
+        line_color='line_color',
+        line_width='line_width',
+        source=source
+    )
+    
+    # Add hover tool
+    hover = HoverTool(tooltips=[
+        ("Model", "@model (@family, @size)"),
+        ("Resource", "@resource_type"),
+        ("Utilization", "@utilization{0.1f}%")
+    ])
+    p.add_tools(hover)
+    
+    # Customize x-axis
+    p.xaxis.major_label_orientation = 45
+    p.xgrid.grid_line_color = None
+    
+    # Add legend for visual distinction
+    from bokeh.models import Legend, LegendItem
+    
+    # Create dummy glyphs for legend
+    if has_cpu:
+        cpu_glyph = p.rect(x=0, y=0, width=0, height=0, 
+                          color=family_colors[list(family_colors.keys())[0]], 
+                          alpha=0.9, line_color='#333333', line_width=3, visible=False)
+    if has_gpu:
+        gpu_glyph = p.rect(x=0, y=0, width=0, height=0, 
+                          color=family_colors[list(family_colors.keys())[0]], 
+                          alpha=0.75, line_color='#666666', line_width=2, visible=False)
+    
+    legend_items = []
+    if has_cpu:
+        legend_items.append(LegendItem(label="CPU (solid border)", renderers=[cpu_glyph]))
+    if has_gpu:
+        legend_items.append(LegendItem(label="GPU (thin border)", renderers=[gpu_glyph]))
+    
+    legend = Legend(items=legend_items, location="top_right")
+    p.add_layout(legend)
+    
+    return p
+
+def create_memory_utilization_chart(model_resource_stats: pd.DataFrame):
+    """Create memory utilization chart per model with family grouping"""
+    if model_resource_stats.empty:
+        st.warning("No memory utilization data available")
+        return None
+    
+    # Check for required columns
+    has_ram = 'avg_memory_utilization' in model_resource_stats.columns
+    has_gpu_mem = 'avg_gpu_memory_utilization' in model_resource_stats.columns
+    
+    if not has_ram and not has_gpu_mem:
+        st.warning("No memory utilization data available")
+        return None
+    
+    models = model_resource_stats['model'].tolist()
+    sorted_models = sort_models_by_family_and_size(models)
+    
+    # Reorder data according to sorted models
+    sorted_stats = model_resource_stats.set_index('model').loc[sorted_models].reset_index()
+    
+    # Get family groupings and colors
+    family_to_models, family_colors = get_model_families_and_colors(sorted_models)
+    
+    # Prepare data for side-by-side bars
+    chart_data = []
+    for i, model in enumerate(sorted_models):
+        stats_row = sorted_stats.iloc[i]
+        family, size = parse_model_info(model)
+        color = get_model_color_with_shade(model, family_to_models, family_colors)
+        
+        if has_ram:
+            chart_data.append({
+                'model': model,
+                'memory_type': 'System RAM',
+                'utilization': stats_row['avg_memory_utilization'],
+                'color': color,
+                'alpha': 0.9,  # More opaque for System RAM
+                'line_color': '#333333',  # Dark border for System RAM
+                'line_width': 3,
+                'hatch_pattern': '',  # Solid fill for System RAM
+                'family': family,
+                'size': f"{size}B"
+            })
+        
+        if has_gpu_mem:
+            # Make GPU memory bars with enhanced visual distinction
+            gpu_color = color
+            if color.startswith('#'):
+                r, g, b = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))
+                # Make GPU memory bars more vibrant
+                r = min(255, int(r * 1.25))
+                g = min(255, int(g * 1.25))  
+                b = min(255, int(b * 1.25))
+                gpu_color = f"#{r:02x}{g:02x}{b:02x}"
+            
+            chart_data.append({
+                'model': model,
+                'memory_type': 'GPU Memory',
+                'utilization': stats_row['avg_gpu_memory_utilization'],
+                'color': gpu_color,
+                'alpha': 0.75,  # Slightly transparent for GPU Memory
+                'line_color': '#666666',  # Medium gray border for GPU Memory
+                'line_width': 2,
+                'hatch_pattern': '\\\\\\',  # Reverse diagonal stripes for GPU Memory
+                'family': family,
+                'size': f"{size}B"
+            })
+    
+    chart_df = pd.DataFrame(chart_data)
+    
+    # Transform data for x axis BEFORE creating source
+    chart_df['x'] = list(zip(chart_df['model'], chart_df['memory_type']))
+    
+    source = ColumnDataSource(chart_df)
+    
+    # Create factors for grouped bars
+    factors = []
+    for model in sorted_models:
+        if has_ram and has_gpu_mem:
+            factors.extend([(model, 'System RAM'), (model, 'GPU Memory')])
+        elif has_ram:
+            factors.append((model, 'System RAM'))
+        elif has_gpu_mem:
+            factors.append((model, 'GPU Memory'))
+    
+    from bokeh.models import FactorRange
+    
+    p = figure(
+        title="💾 Average Memory Utilization per Model (Grouped by Family)",
+        x_range=FactorRange(*factors),
+        y_axis_label="Memory Utilization (%)",
+        width=800,
+        height=400,
+        tools="pan,wheel_zoom,box_zoom,reset,save"
+    )
+    
+    # Create bars with enhanced visual distinction
+    bars = p.vbar(
+        x='x', 
+        top='utilization', 
+        width=0.8, 
+        color='color', 
+        alpha='alpha',
+        line_color='line_color',
+        line_width='line_width',
+        source=source
+    )
+    
+    # Add hover tool
+    hover = HoverTool(tooltips=[
+        ("Model", "@model (@family, @size)"),
+        ("Memory Type", "@memory_type"),
+        ("Utilization", "@utilization{0.1f}%")
+    ])
+    p.add_tools(hover)
+    
+    # Customize x-axis
+    p.xaxis.major_label_orientation = 45
+    p.xgrid.grid_line_color = None
+    
+    # Add legend for visual distinction
+    from bokeh.models import Legend, LegendItem
+    
+    # Create dummy glyphs for legend
+    if has_ram:
+        ram_glyph = p.rect(x=0, y=0, width=0, height=0, 
+                          color=family_colors[list(family_colors.keys())[0]], 
+                          alpha=0.9, line_color='#333333', line_width=3, visible=False)
+    if has_gpu_mem:
+        gpu_mem_glyph = p.rect(x=0, y=0, width=0, height=0, 
+                              color=family_colors[list(family_colors.keys())[0]], 
+                              alpha=0.75, line_color='#666666', line_width=2, visible=False)
+    
+    legend_items = []
+    if has_ram:
+        legend_items.append(LegendItem(label="System RAM (solid border)", renderers=[ram_glyph]))
+    if has_gpu_mem:
+        legend_items.append(LegendItem(label="GPU Memory (thin border)", renderers=[gpu_mem_glyph]))
+    
+    legend = Legend(items=legend_items, location="top_right")
+    p.add_layout(legend)
     
     return p
 
@@ -836,10 +1182,31 @@ def main():
             # Process model metrics
             with st.spinner("Processing model metrics..."):
                 model_stats = process_model_metrics(ollama_df, score_df)
+                
+                # Debug: Show available columns
+                with st.expander("🔍 Debug: Available Data Columns", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**Ollama Data Columns:**")
+                        st.write(list(ollama_df.columns))
+                        st.write(f"**Sample timestamps:**")
+                        if 'timestamp' in ollama_df.columns:
+                            st.write(f"First: {ollama_df['timestamp'].iloc[0]}")
+                            st.write(f"Last: {ollama_df['timestamp'].iloc[-1]}")
+                    
+                    with col2:
+                        st.write("**Prometheus Data Columns:**")
+                        st.write(list(prometheus_df.columns))
+                        st.write(f"**Sample timestamps:**")
+                        if 'timestamp' in prometheus_df.columns:
+                            st.write(f"First: {prometheus_df['timestamp'].iloc[0]}")
+                            st.write(f"Last: {prometheus_df['timestamp'].iloc[-1]}")
+                
+                model_resource_stats = calculate_model_resource_usage(ollama_df, prometheus_df)
             
             # 1. Performance Overview (Quality vs Speed)
             st.subheader("🎯 Performance Overview: Quality vs Speed")
-            st.markdown("*This chart shows the critical trade-off between model quality (score) and response speed. Bubble color indicates throughput (tokens/second).*")
+            st.markdown("*This chart shows the critical trade-off between model quality (score) and response speed.*")
             
             perf_chart = create_performance_overview_chart(model_stats)
             if perf_chart:
@@ -877,8 +1244,41 @@ def main():
             if memory_chart:
                 st.bokeh_chart(memory_chart, use_container_width=True)
             
-            # 6. Model Statistics Summary
-            st.subheader("� Model Performance Summary")
+            # 6. Average CPU & GPU Utilization per Model
+            st.subheader("⚡ Average Resource Utilization per Model")
+            st.markdown("*Shows average CPU and GPU utilization during each model's execution periods.*")
+            st.info("🎨 **Visual Guide:** CPU bars have thick dark borders and are more opaque, while GPU bars have thinner gray borders and are slightly transparent. Colors are grouped by model family.")
+            
+            
+            # Debug info for resource stats
+            st.write(f"📊 **Resource Stats Debug Info:**")
+            st.write(f"- Resource stats shape: {model_resource_stats.shape if not model_resource_stats.empty else 'Empty DataFrame'}")
+            if not model_resource_stats.empty:
+                st.write(f"- Available columns: {list(model_resource_stats.columns)}")
+                st.write(f"- Sample data:")
+                st.dataframe(model_resource_stats.head(), use_container_width=True)
+            else:
+                st.warning("⚠️ No resource correlation data found. This could be due to:")
+                st.write("- Missing timestamp synchronization between Ollama and Prometheus data")
+                st.write("- No overlapping time periods between model executions and metrics collection")
+                st.write("- Missing required columns in the data")
+            
+            cpu_gpu_chart = create_cpu_gpu_utilization_chart(model_resource_stats)
+            if cpu_gpu_chart:
+                st.bokeh_chart(cpu_gpu_chart, use_container_width=True)
+            
+            # 7. Average Memory Utilization per Model
+            st.subheader("💾 Average Memory Utilization per Model")
+            st.markdown("*Shows average system RAM and GPU memory usage during each model's execution periods.*")
+            st.info("🎨 **Visual Guide:** System RAM bars have thick dark borders and are more opaque, while GPU Memory bars have thinner gray borders and are slightly transparent. Colors are grouped by model family.")
+            
+            
+            memory_util_chart = create_memory_utilization_chart(model_resource_stats)
+            if memory_util_chart:
+                st.bokeh_chart(memory_util_chart, use_container_width=True)
+            
+            # 8. Model Statistics Summary
+            st.subheader("📋 Model Performance Summary")
             
             # Create a summary table with family information
             if not model_stats.empty:
@@ -913,7 +1313,7 @@ def main():
                 st.dataframe(summary_df, use_container_width=True)
                 
                 # Key insights
-                st.subheader("� Key Insights")
+                st.subheader("💡 Key Insights")
                 
                 if len(summary_df) > 0:
                     best_quality = summary_df.loc[summary_df['Quality Score'].idxmax()]
